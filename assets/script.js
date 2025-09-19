@@ -135,95 +135,156 @@ function addForestInstanced(treeCount = 4000) {
     transforms.shadowBlobs.push(tmp.matrix.clone());
   };
 
+  // Spatial hashing to reduce tree overlaps
+  const CELL_SIZE = 12;
+  const MAX_TREE_RADIUS = 10;
+  const grid = new Map();
+  const cellIndex = (v) =&gt; Math.floor(v / CELL_SIZE);
+  const key = (ix, iz) =&gt; ix + ',' + iz;
+
+  function canPlaceAt(x, z, r) {
+    const ix = cellIndex(x);
+    const iz = cellIndex(z);
+    const range = Math.ceil((r + MAX_TREE_RADIUS) / CELL_SIZE);
+    for (let dx = -range; dx &lt;= range; dx++) {
+      for (let dz = -range; dz &lt;= range; dz++) {
+        const k = key(ix + dx, iz + dz);
+        const cell = grid.get(k);
+        if (!cell) continue;
+        for (let i = 0; i &lt; cell.length; i++) {
+          const p = cell[i];
+          const minDist = r + p.r;
+          const dxp = x - p.x;
+          const dzp = z - p.z;
+          if ((dxp * dxp + dzp * dzp) &lt; (minDist * minDist)) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function insertAt(x, z, r) {
+    const ix = cellIndex(x);
+    const iz = cellIndex(z);
+    const k = key(ix, iz);
+    if (!grid.has(k)) grid.set(k, []);
+    grid.get(k).push({ x, z, r });
+  }
+
   // Distribute trees across the ground with a few species
   let placed = 0;
-  while (placed < treeCount) {
+  let attempts = 0;
+  const MAX_ATTEMPTS = treeCount * 20;
+  while (placed &lt; treeCount &amp;&amp; attempts &lt; MAX_ATTEMPTS) {
+    attempts++;
+
     const x = (Math.random() - 0.5) * (GROUND_SIZE - 100);
     const z = (Math.random() - 0.5) * (GROUND_SIZE - 100);
 
     // Keep a small clear area in the center
     const minRadius = 20;
-    if (Math.hypot(x, z) < minRadius) continue;
+    if (Math.hypot(x, z) &lt; minRadius) continue;
 
     const r = Math.random();
 
-    if (r < 0.35) {
+    if (r &lt; 0.35) {
       // Pine — classic conifer
       const trunkH = 5 + Math.random() * 4;
       const trunkR = 0.25 + Math.random() * 0.15;
-      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
       const h1 = trunkH * 1.00, r1 = trunkH * 0.55;
       const h2 = trunkH * 0.80, r2 = trunkH * 0.45;
       const h3 = trunkH * 0.60, r3 = trunkH * 0.32;
 
+      const footR = Math.max(r1, r2, r3) * 0.9;
+      if (!canPlaceAt(x, z, footR)) continue;
+
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
       push(transforms.pineC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
       push(transforms.pineC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
       push(transforms.pineC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
 
       const shadowR = Math.max(r1, r2, r3) * 1.1;
       addShadow(x, z, shadowR);
+      insertAt(x, z, footR);
 
-    } else if (r < 0.60) {
+    } else if (r &lt; 0.60) {
       // Spruce — taller, narrower, darker needles
       const trunkH = 6.5 + Math.random() * 5;
       const trunkR = 0.22 + Math.random() * 0.12;
-      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
       const h1 = trunkH * 1.30, r1 = trunkH * 0.42;
       const h2 = trunkH * 1.00, r2 = trunkH * 0.33;
       const h3 = trunkH * 0.70, r3 = trunkH * 0.24;
 
+      const footR = Math.max(r1, r2, r3) * 0.9;
+      if (!canPlaceAt(x, z, footR)) continue;
+
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
       push(transforms.spruceC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
       push(transforms.spruceC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
       push(transforms.spruceC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
 
       const shadowR = Math.max(r1, r2, r3) * 1.05;
       addShadow(x, z, shadowR);
+      insertAt(x, z, footR);
 
-    } else if (r < 0.85) {
+    } else if (r &lt; 0.85) {
       // Deciduous — rounded canopy
       const trunkH = 4.5 + Math.random() * 3.5;
       const trunkR = 0.28 + Math.random() * 0.18;
-      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
       // bottom canopy - broad ellipsoid
       const rB = trunkH * (0.85 + Math.random() * 0.15);
       const syB = rB * 0.75;
-      push(transforms.decidBot, x, trunkH + syB * 0.6, z, rB, syB, rB);
 
       // top canopy - smaller, slightly taller
       const rT = trunkH * (0.60 + Math.random() * 0.10);
       const syT = rT * 0.80;
+
+      const footR = Math.max(rB, rT);
+      if (!canPlaceAt(x, z, footR)) continue;
+
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+      push(transforms.decidBot, x, trunkH + syB * 0.6, z, rB, syB, rB);
       push(transforms.decidTop, x, trunkH + syB + syT * 0.5, z, rT, syT, rT);
 
       const shadowR = Math.max(rB, rT) * 1.15;
       addShadow(x, z, shadowR);
+      insertAt(x, z, footR);
 
-    } else if (r < 0.97) {
+    } else if (r &lt; 0.97) {
       // Birch — slender white trunk, light green canopy
       const trunkH = 5 + Math.random() * 3;
       const trunkR = 0.18 + Math.random() * 0.12;
-      push(transforms.trunkBirch, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
       const rB = trunkH * (0.70 + Math.random() * 0.15);
       const syB = rB * 0.60;
-      push(transforms.birchBot, x, trunkH + syB * 0.65, z, rB, syB, rB);
-
       const rT = trunkH * (0.45 + Math.random() * 0.10);
       const syT = rT * 0.70;
+
+      const footR = Math.max(rB, rT);
+      if (!canPlaceAt(x, z, footR)) continue;
+
+      push(transforms.trunkBirch, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+      push(transforms.birchBot, x, trunkH + syB * 0.65, z, rB, syB, rB);
       push(transforms.birchTop, x, trunkH + syB + syT * 0.55, z, rT, syT, rT);
 
       const shadowR = Math.max(rB, rT) * 1.1;
       addShadow(x, z, shadowR);
+      insertAt(x, z, footR);
 
     } else {
       // Dead tree — trunk only
       const trunkH = 5 + Math.random() * 5;
       const trunkR = 0.23 + Math.random() * 0.15;
-      push(transforms.trunkDead, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
+      const footR = trunkR * 2.0;
+      if (!canPlaceAt(x, z, footR)) continue;
+
+      push(transforms.trunkDead, x, trunkH / 2, z, trunkR, trunkH, trunkR);
       addShadow(x, z, trunkR * 1.5);
+      insertAt(x, z, footR);
     }
 
     placed++;
