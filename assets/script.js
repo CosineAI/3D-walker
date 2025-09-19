@@ -139,24 +139,24 @@ function addForestInstanced(treeCount = 4000) {
   const CELL_SIZE = 12;
   const MAX_TREE_RADIUS = 10;
   const grid = new Map();
-  const cellIndex = (v) =&gt; Math.floor(v / CELL_SIZE);
-  const key = (ix, iz) =&gt; ix + ',' + iz;
+  const cellIndex = (v) => Math.floor(v / CELL_SIZE);
+  const key = (ix, iz) => ix + ',' + iz;
 
   function canPlaceAt(x, z, r) {
     const ix = cellIndex(x);
     const iz = cellIndex(z);
     const range = Math.ceil((r + MAX_TREE_RADIUS) / CELL_SIZE);
-    for (let dx = -range; dx &lt;= range; dx++) {
-      for (let dz = -range; dz &lt;= range; dz++) {
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dz = -range; dz <= range; dz++) {
         const k = key(ix + dx, iz + dz);
         const cell = grid.get(k);
         if (!cell) continue;
-        for (let i = 0; i &lt; cell.length; i++) {
+        for (let i = 0; i < cell.length; i++) {
           const p = cell[i];
           const minDist = r + p.r;
           const dxp = x - p.x;
           const dzp = z - p.z;
-          if ((dxp * dxp + dzp * dzp) &lt; (minDist * minDist)) return false;
+          if ((dxp * dxp + dzp * dzp) < (minDist * minDist)) return false;
         }
       }
     }
@@ -175,7 +175,7 @@ function addForestInstanced(treeCount = 4000) {
   let placed = 0;
   let attempts = 0;
   const MAX_ATTEMPTS = treeCount * 20;
-  while (placed &lt; treeCount &amp;&amp; attempts &lt; MAX_ATTEMPTS) {
+  while (placed < treeCount && attempts < MAX_ATTEMPTS) {
     attempts++;
 
     const x = (Math.random() - 0.5) * (GROUND_SIZE - 100);
@@ -183,11 +183,11 @@ function addForestInstanced(treeCount = 4000) {
 
     // Keep a small clear area in the center
     const minRadius = 20;
-    if (Math.hypot(x, z) &lt; minRadius) continue;
+    if (Math.hypot(x, z) < minRadius) continue;
 
     const r = Math.random();
 
-    if (r &lt; 0.35) {
+    if (r < 0.35) {
       // Pine — classic conifer
       const trunkH = 5 + Math.random() * 4;
       const trunkR = 0.25 + Math.random() * 0.15;
@@ -208,7 +208,7 @@ function addForestInstanced(treeCount = 4000) {
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
-    } else if (r &lt; 0.60) {
+    } else if (r < 0.60) {
       // Spruce — taller, narrower, darker needles
       const trunkH = 6.5 + Math.random() * 5;
       const trunkR = 0.22 + Math.random() * 0.12;
@@ -229,7 +229,7 @@ function addForestInstanced(treeCount = 4000) {
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
-    } else if (r &lt; 0.85) {
+    } else if (r < 0.85) {
       // Deciduous — rounded canopy
       const trunkH = 4.5 + Math.random() * 3.5;
       const trunkR = 0.28 + Math.random() * 0.18;
@@ -253,7 +253,7 @@ function addForestInstanced(treeCount = 4000) {
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
-    } else if (r &lt; 0.97) {
+    } else if (r < 0.97) {
       // Birch — slender white trunk, light green canopy
       const trunkH = 5 + Math.random() * 3;
       const trunkR = 0.18 + Math.random() * 0.12;
