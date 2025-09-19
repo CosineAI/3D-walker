@@ -160,12 +160,16 @@ const DAMPING = 8.0;
 function onKeyDown(event) {
   switch (event.code) {
     case 'ArrowUp':
+    case 'KeyW':
       moveForward = true; event.preventDefault(); break;
     case 'ArrowLeft':
+    case 'KeyA':
       moveLeft = true; event.preventDefault(); break;
     case 'ArrowDown':
+    case 'KeyS':
       moveBackward = true; event.preventDefault(); break;
     case 'ArrowRight':
+    case 'KeyD':
       moveRight = true; event.preventDefault(); break;
     default:
       break;
@@ -175,12 +179,16 @@ function onKeyDown(event) {
 function onKeyUp(event) {
   switch (event.code) {
     case 'ArrowUp':
+    case 'KeyW':
       moveForward = false; event.preventDefault(); break;
     case 'ArrowLeft':
+    case 'KeyA':
       moveLeft = false; event.preventDefault(); break;
     case 'ArrowDown':
+    case 'KeyS':
       moveBackward = false; event.preventDefault(); break;
     case 'ArrowRight':
+    case 'KeyD':
       moveRight = false; event.preventDefault(); break;
     default:
       break;
