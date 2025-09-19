@@ -110,6 +110,34 @@ canvas {
   outline-offset: 2px;
 }
 
+/* HUD */
+#hud {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+#stamina {
+  width: 320px;
+  height: 12px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 1px 2px rgba(255,255,255,0.15);
+  overflow: hidden;
+}
+
+#stamina-fill {
+  height: 100%;
+  width: 100%;
+  background: #22c55e; /* default green */
+  border-radius: 999px;
+  transition: width 120ms ease, background-color 120ms ease;
+}
+
 @media (max-width: 850px) {
   main {
     max-width: 98vw;

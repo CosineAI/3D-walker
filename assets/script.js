@@ -159,6 +159,13 @@ const SPEED = 40; // world units per second
 const DAMPING = 8.0;
 const SPRINT_MULTIPLIER = 2.0;
 
+// Stamina
+const MAX_STAMINA = 100;
+let stamina = MAX_STAMINA;
+const STAMINA_DRAIN_PER_SEC = 30; // while sprinting
+const STAMINA_REGEN_PER_SEC = 20; // while not sprinting
+const staminaFill = document.getElementById('stamina-fill');
+
 function onKeyDown(event) {
   switch (event.code) {
     case 'ArrowUp':
@@ -233,13 +240,32 @@ function animate() {
   direction.normalize();
 
   if (controls.isLocked) {
-    const curSpeed = SPEED * (isSprinting ? SPRINT_MULTIPLIER : 1);
+    const moving = moveForward || moveBackward || moveLeft || moveRight;
+    const sprinting = isSprinting && moving && stamina > 0;
+
+    const curSpeed = SPEED * (sprinting ? SPRINT_MULTIPLIER : 1);
     if (moveForward || moveBackward) velocity.z -= direction.z * curSpeed * delta;
     if (moveLeft || moveRight) velocity.x -= direction.x * curSpeed * delta;
 
+    // Apply movement
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
     clampPlayer();
+
+    // Stamina drain/regen
+    if (sprinting) {
+      stamina -= STAMINA_DRAIN_PER_SEC * delta;
+    } else {
+      stamina += STAMINA_REGEN_PER_SEC * delta;
+    }
+    stamina = Math.max(0, Math.min(MAX_STAMINA, stamina));
+  }
+
+  // Update stamina UI
+  const ratio = stamina / MAX_STAMINA;
+  if (staminaFill) {
+    staminaFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    staminaFill.style.backgroundColor = ratio > 0.6 ? '#22c55e' : (ratio > 0.3 ? '#f59e0b' : '#ef4444');
   }
 
   renderer.render(scene, camera);
