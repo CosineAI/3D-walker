@@ -4,6 +4,7 @@
 import * as THREE from 'https://esm.sh/three@0.180.0';
 import { PointerLockControls } from 'https://esm.sh/three@0.180.0/examples/jsm/controls/PointerLockControls.js';
 import { mergeVertices } from 'https://esm.sh/three@0.180.0/examples/jsm/utils/BufferGeometryUtils.js';
+import { ConvexGeometry } from 'https://esm.sh/three@0.180.0/examples/jsm/geometries/ConvexGeometry.js';
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -388,12 +389,29 @@ function addRocksInstanced(rockCount = 1200) {
     return geo;
   }
 
+  // Rebuild as a convex, closed mesh with a flat bottom
+  function toConvexFlatBottom(geo) {
+    const pos = geo.getAttribute('position');
+    const points = [];
+    for (let i = 0; i < pos.count; i++) {
+      points.push(new THREE.Vector3(
+        pos.getX(i),
+        Math.max(0, pos.getY(i)),
+        pos.getZ(i)
+      ));
+    }
+    const convex = new ConvexGeometry(points);
+    convex.computeVertexNormals();
+    return convex;
+  }
+
   function prepareRockGeometry(baseGeo, amp, yFactor) {
     // Merge duplicate vertices so faces stay connected during displacement
-    const merged = mergeVertices(baseGeo, 1e-3);
+    const merged = mergeVertices(baseGeo, 1e-5);
     displaceAlongNormals(merged, amp, yFactor);
-    flattenBottom(merged);
-    return merged;
+    // Build a watertight convex mesh from the displaced points, clamped at y >= 0
+    const convex = toConvexFlatBottom(merged);
+    return convex;
   }
 
   // Create additional base shapes and vary them
@@ -409,11 +427,11 @@ function addRocksInstanced(rockCount = 1200) {
   rockGeoE = prepareRockGeometry(rockGeoE, 0.20, 0.9);
 
   // Materials (a few subtle color variants)
-  const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 }); // light granite
-  const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0 }); // dark granite
-  const rockMatC = new THREE.MeshStandardMaterial({ color: 0x7a6e65, roughness: 0.98, metalness: 0.0 }); // brownish
-  const rockMatD = new THREE.MeshStandardMaterial({ color: 0x5f6a58, roughness: 0.98, metalness: 0.0 }); // mossy green-gray
-  const rockMatE = new THREE.MeshStandardMaterial({ color: 0x6b7685, roughness: 0.98, metalness: 0.0 }); // slate
+  const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0, flatShading: true }); // light granite
+  const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0, flatShading: true }); // dark granite
+  const rockMatC = new THREE.MeshStandardMaterial({ color: 0x7a6e65, roughness: 0.98, metalness: 0.0, flatShading: true }); // brownish
+  const rockMatD = new THREE.MeshStandardMaterial({ color: 0x5f6a58, roughness: 0.98, metalness: 0.0, flatShading: true }); // mossy green-gray
+  const rockMatE = new THREE.MeshStandardMaterial({ color: 0x6b7685, roughness: 0.98, metalness: 0.0, flatShading: true }); // slate
 
   // Transform arrays per geometry
   const matsA = [];
