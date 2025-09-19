@@ -871,34 +871,70 @@ const SKY_SUNSET = new THREE.Color(0xff9a8b); // orange/pink
 const SKY_NOON  = new THREE.Color(0xaad8ff); // light blue
 const skyWork = new THREE.Color();
 
-function sampleSkyColor(out, t) {
-  // t in [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
-  let c0, c1, tt;
-  if (t < 0.25) {
-    c0 = SKY_NIGHT; c1 = SKY_SUNSET; tt = t / 0.25;
-  } else if (t < 0.5) {
-    c0 = SKY_SUNSET; c1 = SKY_NOON; tt = (t - 0.25) / 0.25;
-  } else if (t < 0.75) {
-    c0 = SKY_NOON; c1 = SKY_SUNSET; tt = (t - 0.5) / 0.25;
-  } else {
-    c0 = SKY_SUNSET; c1 = SKY_NIGHT; tt = (t - 0.75) / 0.25;
+// Time anchors (in hours)
+const SUNRISE_START = 5.5;  // ~5:30 am
+const SUNRISE_END   = 7.0;  // ~7:00 am
+const SUNSET_START  = 17.0; // ~5:00 pm
+const NIGHT_START   = 19.5; // ~7:30 pm -> should be dark by 7–8 pm
+
+function sampleSkyColor(out, h) {
+  // h in [0,24): use key hours so night begins around 7–8 pm
+  if (h >= NIGHT_START || h < SUNRISE_START) {
+    out.copy(SKY_NIGHT);
+    return out;
   }
-  out.copy(c0).lerp(c1, tt);
+
+  if (h >= SUNSET_START && h < NIGHT_START) {
+    const u = (h - SUNSET_START) / (NIGHT_START - SUNSET_START); // 0..1
+    if (u < 0.5) {
+      out.copy(SKY_NOON).lerp(SKY_SUNSET, u / 0.5);
+    } else {
+      out.copy(SKY_SUNSET).lerp(SKY_NIGHT, (u - 0.5) / 0.5);
+    }
+    return out;
+  }
+
+  if (h >= SUNRISE_START && h < SUNRISE_END) {
+    const u = (h - SUNRISE_START) / (SUNRISE_END - SUNRISE_START); // 0..1
+    if (u < 0.5) {
+      out.copy(SKY_NIGHT).lerp(SKY_SUNSET, u / 0.5);
+    } else {
+      out.copy(SKY_SUNSET).lerp(SKY_NOON, (u - 0.5) / 0.5);
+    }
+    return out;
+  }
+
+  // Daytime
+  out.copy(SKY_NOON);
   return out;
 }
 
-function daylightStrength(t) {
-  // 0 at midnight, 1 at noon (simple cosine curve)
-  const a = Math.cos((t - 0.5) * Math.PI * 2);
-  return Math.max(0, a);
+function daylightStrengthHours(h) {
+  // Piecewise curve: 0 at night, ramps up at sunrise, peaks around noon, ramps down to 0 by ~7:30 pm
+  if (h < SUNRISE_START || h >= NIGHT_START) return 0;
+
+  if (h < SUNRISE_END) {
+    // Linear ramp from 0 -> 0.6 across sunrise window
+    return (h - SUNRISE_START) / (SUNRISE_END - SUNRISE_START) * 0.6;
+  }
+
+  if (h >= SUNSET_START) {
+    // Linear ramp from 0.6 -> 0 across sunset window (sunset_start..night_start)
+    const u = (h - SUNSET_START) / (NIGHT_START - SUNSET_START);
+    return (1 - u) * 0.6;
+  }
+
+  // Daytime arch peaking at noon; stays >= 0.6 during full day
+  const u = (h - SUNRISE_END) / (SUNSET_START - SUNRISE_END); // 0..1 across the day
+  return 0.6 + 0.4 * Math.sin(Math.PI * u); // 0.6 at edges, 1.0 at noon
 }
 
-function updateEnvironmentForTime(t) {
-  sampleSkyColor(skyWork, t);
+function updateEnvironmentForHour(h) {
+  sampleSkyColor(skyWork, h);
   scene.background.copy(skyWork);
   if (scene.fog) scene.fog.color.copy(skyWork);
 
-  const f = daylightStrength(t);
+  const f = daylightStrengthHours(h);
   hemi.intensity = 0.1 + 0.5 * f;      // ~0.6 at noon, ~0.1 at night
   dirLight.intensity = 0.05 + 0.75 * f; // ~0.8 at noon, small fill at night
   hemi.color.copy(skyWork);
@@ -951,8 +987,7 @@ function animate() {
 
   // Time of day progression and environment
   worldTimeHours = (worldTimeHours + delta * HOURS_PER_SECOND) % 24;
-  const tDay = worldTimeHours / 24;
-  updateEnvironmentForTime(tDay);
+  updateEnvironmentForHour(worldTimeHours);
 
   // Update HUD clock hands
   if (clockHourHand && clockMinuteHand) {
