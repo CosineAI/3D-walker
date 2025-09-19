@@ -104,11 +104,34 @@ function addForestInstanced(treeCount = 4000) {
     arr.push(tmp.matrix.clone());
   };
 
+  // Align blob shadows with the sun direction and offset them accordingly
+  const sunDir = new THREE.Vector3().subVectors(dirLight.target.position, dirLight.position).normalize();
+  const sunDirXZ = new THREE.Vector3(sunDir.x, 0, sunDir.z);
+  let shadowAngleY = 0;
+  let shadowOffsetFactor = 0;
+  if (sunDirXZ.lengthSq() > 1e-6) {
+    sunDirXZ.normalize();
+    shadowAngleY = Math.atan2(sunDirXZ.x, sunDirXZ.z);
+    // Lower sun (smaller |y|) -> longer shadows, but clamp for sanity
+    shadowOffsetFactor = 1.2 / Math.max(0.3, Math.abs(sunDir.y));
+  } else {
+    sunDirXZ.set(1, 0, 0);
+    shadowAngleY = 0;
+    shadowOffsetFactor = 0;
+  }
+
   const addShadow = (x, z, radius) => {
     // Slight randomness for more organic look
-    const rx = Math.max(2, radius * 2 * (0.95 + Math.random() * 0.1));
-    const rz = Math.max(2, radius * 2 * (0.95 + Math.random() * 0.1));
-    push(transforms.shadowBlobs, x, 0.01, z, rx, rz, 1);
+    const base = 1.7 * (0.95 + Math.random() * 0.1);
+    const rx = Math.max(2, radius * base);
+    const rz = Math.max(2, radius * (base + shadowOffsetFactor)); // stretch along sun direction
+    const offset = radius * shadowOffsetFactor;
+
+    tmp.position.set(x + sunDirXZ.x * offset, 0.01, z + sunDirXZ.z * offset);
+    tmp.rotation.set(0, shadowAngleY, 0);
+    tmp.scale.set(rx, rz, 1);
+    tmp.updateMatrix();
+    transforms.shadowBlobs.push(tmp.matrix.clone());
   };
 
   // Distribute trees across the ground with a few species
