@@ -856,6 +856,54 @@ function clampPlayer() {
   obj.position.z = Math.max(-half, Math.min(half, obj.position.z));
 }
 
+// Time of day system
+const HOUR_SECONDS = 10; // 1 in-game hour per 10 real seconds
+const HOURS_PER_SECOND = 1 / HOUR_SECONDS;
+let worldTimeHours = 12; // start at noon
+
+// HUD clock elements
+const clockHourHand = document.querySelector('#clock .hand.hour');
+const clockMinuteHand = document.querySelector('#clock .hand.minute');
+
+// Sky colors
+const SKY_NIGHT = new THREE.Color(0x0b1020);
+const SKY_SUNSET = new THREE.Color(0xff9a8b); // orange/pink
+const SKY_NOON  = new THREE.Color(0xaad8ff); // light blue
+const skyWork = new THREE.Color();
+
+function sampleSkyColor(out, t) {
+  // t in [0,1): 0=midnight, 0.25=sunrise, 0.5=noon, 0.75=sunset
+  let c0, c1, tt;
+  if (t < 0.25) {
+    c0 = SKY_NIGHT; c1 = SKY_SUNSET; tt = t / 0.25;
+  } else if (t < 0.5) {
+    c0 = SKY_SUNSET; c1 = SKY_NOON; tt = (t - 0.25) / 0.25;
+  } else if (t < 0.75) {
+    c0 = SKY_NOON; c1 = SKY_SUNSET; tt = (t - 0.5) / 0.25;
+  } else {
+    c0 = SKY_SUNSET; c1 = SKY_NIGHT; tt = (t - 0.75) / 0.25;
+  }
+  out.copy(c0).lerp(c1, tt);
+  return out;
+}
+
+function daylightStrength(t) {
+  // 0 at midnight, 1 at noon (simple cosine curve)
+  const a = Math.cos((t - 0.5) * Math.PI * 2);
+  return Math.max(0, a);
+}
+
+function updateEnvironmentForTime(t) {
+  sampleSkyColor(skyWork, t);
+  scene.background.copy(skyWork);
+  if (scene.fog) scene.fog.color.copy(skyWork);
+
+  const f = daylightStrength(t);
+  hemi.intensity = 0.1 + 0.5 * f;      // ~0.6 at noon, ~0.1 at night
+  dirLight.intensity = 0.05 + 0.75 * f; // ~0.8 at noon, small fill at night
+  hemi.color.copy(skyWork);
+}
+
 // Animation loop
 const clock = new THREE.Clock();
 
@@ -899,6 +947,21 @@ function animate() {
   if (staminaFill) {
     staminaFill.style.width = `${(ratio * 100).toFixed(1)}%`;
     staminaFill.style.backgroundColor = ratio > 0.6 ? '#22c55e' : (ratio > 0.3 ? '#f59e0b' : '#ef4444');
+  }
+
+  // Time of day progression and environment
+  worldTimeHours = (worldTimeHours + delta * HOURS_PER_SECOND) % 24;
+  const tDay = worldTimeHours / 24;
+  updateEnvironmentForTime(tDay);
+
+  // Update HUD clock hands
+  if (clockHourHand && clockMinuteHand) {
+    const minutes = (worldTimeHours % 1) * 60;
+    const hour12 = worldTimeHours % 12;
+    const hourDeg = (hour12 + minutes / 60) * 30; // 360/12
+    const minuteDeg = minutes * 6;                 // 360/60
+    clockHourHand.style.transform = `translate(-50%, 0) rotate(${hourDeg}deg)`;
+    clockMinuteHand.style.transform = `translate(-50%, 0) rotate(${minuteDeg}deg)`;
   }
 
   renderer.render(scene, camera);
