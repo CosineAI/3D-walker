@@ -44,35 +44,47 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Trees (instanced for performance)
+// Trees (instanced for performance) — now with multiple species for variety
 function addForestInstanced(treeCount = 4000) {
   const forest = new THREE.Group();
 
   // Base unit geometries
   const trunkGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
   const coneGeo = new THREE.ConeGeometry(1, 1, 10);
+  const sphereGeo = new THREE.SphereGeometry(1, 12, 10);
 
   // Materials
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4a21, roughness: 1.0, metalness: 0.0 });
-  const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });
+  const trunkBrownMat = new THREE.MeshStandardMaterial({ color: 0x7a4a21, roughness: 1.0, metalness: 0.0 }); // pine/deciduous trunk
+  const trunkBirchMat = new THREE.MeshStandardMaterial({ color: 0xe7ded0, roughness: 0.95 });                  // birch trunk
+  const trunkDeadMat  = new THREE.MeshStandardMaterial({ color: 0x6b5b53, roughness: 1.0 });                   // dead wood
 
-  // Instanced meshes
-  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
-  const cones1 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
-  const cones2 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
-  const cones3 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
+  const foliageConiferMat      = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });  // pine
+  const foliageConiferDarkMat  = new THREE.MeshStandardMaterial({ color: 0x1f6d3c, roughness: 0.95 }); // spruce
+  const foliageDeciduousMat    = new THREE.MeshStandardMaterial({ color: 0x3ea24a, roughness: 0.9 });  // deciduous
+  const foliageBirchMat        = new THREE.MeshStandardMaterial({ color: 0x6abd45, roughness: 0.95 }); // birch leaves
 
-  // Shadows: disable casting for performance with thousands of instances
-  trunks.castShadow = false;
-  trunks.receiveShadow = true;
-  cones1.castShadow = false;
-  cones2.castShadow = false;
-  cones3.castShadow = false;
+  // Transform buffers per species/part
+  const transforms = {
+    trunkBrown: [], trunkBirch: [], trunkDead: [],
+    pineC1: [], pineC2: [], pineC3: [],
+    spruceC1: [], spruceC2: [], spruceC3: [],
+    decidBot: [], decidTop: [],
+    birchBot: [], birchTop: [],
+  };
 
+  // Helper to push transforms
   const tmp = new THREE.Object3D();
-  let index = 0;
+  const push = (arr, x, y, z, sx, sy, sz) => {
+    tmp.position.set(x, y, z);
+    tmp.rotation.set(0, 0, 0);
+    tmp.scale.set(sx, sy, sz);
+    tmp.updateMatrix();
+    arr.push(tmp.matrix.clone());
+  };
 
-  while (index < treeCount) {
+  // Distribute trees across the ground with a few species
+  let placed = 0;
+  while (placed < treeCount) {
     const x = (Math.random() - 0.5) * (GROUND_SIZE - 100);
     const z = (Math.random() - 0.5) * (GROUND_SIZE - 100);
 
@@ -80,48 +92,113 @@ function addForestInstanced(treeCount = 4000) {
     const minRadius = 20;
     if (Math.hypot(x, z) < minRadius) continue;
 
-    const trunkH = 5 + Math.random() * 4;
-    const trunkR = 0.25 + Math.random() * 0.15;
+    const r = Math.random();
 
-    // Trunk transform (scale unit cylinder)
-    tmp.position.set(x, trunkH / 2, z);
-    tmp.rotation.set(0, 0, 0);
-    tmp.scale.set(trunkR, trunkH, trunkR);
-    tmp.updateMatrix();
-    trunks.setMatrixAt(index, tmp.matrix);
+    if (r < 0.35) {
+      // Pine — classic conifer
+      const trunkH = 5 + Math.random() * 4;
+      const trunkR = 0.25 + Math.random() * 0.15;
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
-    // Foliage sizes based on trunkH
-    const h1 = trunkH * 1.0, r1 = trunkH * 0.55;
-    const h2 = trunkH * 0.8,  r2 = trunkH * 0.45;
-    const h3 = trunkH * 0.6,  r3 = trunkH * 0.32;
+      const h1 = trunkH * 1.00, r1 = trunkH * 0.55;
+      const h2 = trunkH * 0.80, r2 = trunkH * 0.45;
+      const h3 = trunkH * 0.60, r3 = trunkH * 0.32;
 
-    // First cone
-    tmp.position.set(x, trunkH + h1 / 2 - 0.2, z);
-    tmp.scale.set(r1, h1, r1);
-    tmp.updateMatrix();
-    cones1.setMatrixAt(index, tmp.matrix);
+      push(transforms.pineC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
+      push(transforms.pineC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
+      push(transforms.pineC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
 
-    // Second cone
-    tmp.position.set(x, trunkH + h1 - 0.3 + h2 / 2, z);
-    tmp.scale.set(r2, h2, r2);
-    tmp.updateMatrix();
-    cones2.setMatrixAt(index, tmp.matrix);
+    } else if (r < 0.60) {
+      // Spruce — taller, narrower, darker needles
+      const trunkH = 6.5 + Math.random() * 5;
+      const trunkR = 0.22 + Math.random() * 0.12;
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
 
-    // Third cone
-    tmp.position.set(x, trunkH + h1 + h2 - 0.4 + h3 / 2, z);
-    tmp.scale.set(r3, h3, r3);
-    tmp.updateMatrix();
-    cones3.setMatrixAt(index, tmp.matrix);
+      const h1 = trunkH * 1.30, r1 = trunkH * 0.42;
+      const h2 = trunkH * 1.00, r2 = trunkH * 0.33;
+      const h3 = trunkH * 0.70, r3 = trunkH * 0.24;
 
-    index++;
+      push(transforms.spruceC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
+      push(transforms.spruceC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
+      push(transforms.spruceC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+
+    } else if (r < 0.85) {
+      // Deciduous — rounded canopy
+      const trunkH = 4.5 + Math.random() * 3.5;
+      const trunkR = 0.28 + Math.random() * 0.18;
+      push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+
+      // bottom canopy - broad ellipsoid
+      const rB = trunkH * (0.85 + Math.random() * 0.15);
+      const syB = rB * 0.75;
+      push(transforms.decidBot, x, trunkH + syB * 0.6, z, rB, syB, rB);
+
+      // top canopy - smaller, slightly taller
+      const rT = trunkH * (0.60 + Math.random() * 0.10);
+      const syT = rT * 0.80;
+      push(transforms.decidTop, x, trunkH + syB + syT * 0.5, z, rT, syT, rT);
+
+    } else if (r < 0.97) {
+      // Birch — slender white trunk, light green canopy
+      const trunkH = 5 + Math.random() * 3;
+      const trunkR = 0.18 + Math.random() * 0.12;
+      push(transforms.trunkBirch, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+
+      const rB = trunkH * (0.70 + Math.random() * 0.15);
+      const syB = rB * 0.60;
+      push(transforms.birchBot, x, trunkH + syB * 0.65, z, rB, syB, rB);
+
+      const rT = trunkH * (0.45 + Math.random() * 0.10);
+      const syT = rT * 0.70;
+      push(transforms.birchTop, x, trunkH + syB + syT * 0.55, z, rT, syT, rT);
+
+    } else {
+      // Dead tree — trunk only
+      const trunkH = 5 + Math.random() * 5;
+      const trunkR = 0.23 + Math.random() * 0.15;
+      push(transforms.trunkDead, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+    }
+
+    placed++;
   }
 
-  trunks.instanceMatrix.needsUpdate = true;
-  cones1.instanceMatrix.needsUpdate = true;
-  cones2.instanceMatrix.needsUpdate = true;
-  cones3.instanceMatrix.needsUpdate = true;
+  // Helper to build InstancedMeshes from transform arrays
+  function build(geo, mat, matrices, receiveShadow = false) {
+    if (!matrices.length) return null;
+    const mesh = new THREE.InstancedMesh(geo, mat, matrices.length);
+    for (let i = 0; i < matrices.length; i++) {
+      mesh.setMatrixAt(i, matrices[i]);
+    }
+    mesh.castShadow = false; // disabled for perf with thousands of instances
+    mesh.receiveShadow = receiveShadow;
+    mesh.instanceMatrix.needsUpdate = true;
+    return mesh;
+  }
 
-  forest.add(trunks, cones1, cones2, cones3);
+  const meshes = [
+    build(trunkGeo,  trunkBrownMat, transforms.trunkBrown, true),
+    build(trunkGeo,  trunkBirchMat, transforms.trunkBirch, true),
+    build(trunkGeo,  trunkDeadMat,  transforms.trunkDead,  true),
+
+    build(coneGeo,   foliageConiferMat,     transforms.pineC1),
+    build(coneGeo,   foliageConiferMat,     transforms.pineC2),
+    build(coneGeo,   foliageConiferMat,     transforms.pineC3),
+
+    build(coneGeo,   foliageConiferDarkMat, transforms.spruceC1),
+    build(coneGeo,   foliageConiferDarkMat, transforms.spruceC2),
+    build(coneGeo,   foliageConiferDarkMat, transforms.spruceC3),
+
+    build(sphereGeo, foliageDeciduousMat,   transforms.decidBot),
+    build(sphereGeo, foliageDeciduousMat,   transforms.decidTop),
+
+    build(sphereGeo, foliageBirchMat,       transforms.birchBot),
+    build(sphereGeo, foliageBirchMat,       transforms.birchTop),
+  ];
+
+  for (const m of meshes) {
+    if (m) forest.add(m);
+  }
+
   scene.add(forest);
 }
 
