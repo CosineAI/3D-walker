@@ -151,11 +151,13 @@ let moveForward = false;
 let moveBackward = false;
 let moveLeft = false;
 let moveRight = false;
+let isSprinting = false;
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 const SPEED = 40; // world units per second
 const DAMPING = 8.0;
+const SPRINT_MULTIPLIER = 2.0;
 
 function onKeyDown(event) {
   switch (event.code) {
@@ -171,6 +173,9 @@ function onKeyDown(event) {
     case 'ArrowRight':
     case 'KeyD':
       moveRight = true; event.preventDefault(); break;
+    case 'ShiftLeft':
+    case 'ShiftRight':
+      isSprinting = true; event.preventDefault(); break;
     default:
       break;
   }
@@ -190,6 +195,9 @@ function onKeyUp(event) {
     case 'ArrowRight':
     case 'KeyD':
       moveRight = false; event.preventDefault(); break;
+    case 'ShiftLeft':
+    case 'ShiftRight':
+      isSprinting = false; event.preventDefault(); break;
     default:
       break;
   }
@@ -225,8 +233,9 @@ function animate() {
   direction.normalize();
 
   if (controls.isLocked) {
-    if (moveForward || moveBackward) velocity.z -= direction.z * SPEED * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * SPEED * delta;
+    const curSpeed = SPEED * (isSprinting ? SPRINT_MULTIPLIER : 1);
+    if (moveForward || moveBackward) velocity.z -= direction.z * curSpeed * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * curSpeed * delta;
 
     controls.moveRight(-velocity.x * delta);
     controls.moveForward(-velocity.z * delta);
