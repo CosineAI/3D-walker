@@ -104,7 +104,7 @@ addForest(350);
 
 // Controls (mouse look + keyboard move)
 const controls = new PointerLockControls(camera, document.body);
-scene.add(controls.getObject());
+// PointerLockControls r180 controls the camera directly; no need to add an object to the scene.
 
 const overlay = document.getElementById('overlay');
 const startBtn = document.getElementById('start');
@@ -167,7 +167,7 @@ document.addEventListener('keyup', onKeyUp);
 
 // Keep the camera above ground and within bounds
 function clampPlayer() {
-  const obj = controls.getObject();
+  const obj = camera; // controls operate directly on the camera in r180
   obj.position.y = EYE_HEIGHT;
   const half = GROUND_SIZE * 0.5 - 5;
   obj.position.x = Math.max(-half, Math.min(half, obj.position.x));
