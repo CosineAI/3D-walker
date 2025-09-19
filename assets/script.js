@@ -44,63 +44,88 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Trees
-function addForest(treeCount = 300) {
+// Trees (instanced for performance)
+function addForestInstanced(treeCount = 4000) {
   const forest = new THREE.Group();
-  for (let i = 0; i < treeCount; i++) {
+
+  // Base unit geometries
+  const trunkGeo = new THREE.CylinderGeometry(1, 1, 1, 8);
+  const coneGeo = new THREE.ConeGeometry(1, 1, 10);
+
+  // Materials
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4a21, roughness: 1.0, metalness: 0.0 });
+  const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2e8b57, roughness: 0.9 });
+
+  // Instanced meshes
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, treeCount);
+  const cones1 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
+  const cones2 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
+  const cones3 = new THREE.InstancedMesh(coneGeo, foliageMat, treeCount);
+
+  // Shadows: disable casting for performance with thousands of instances
+  trunks.castShadow = false;
+  trunks.receiveShadow = true;
+  cones1.castShadow = false;
+  cones2.castShadow = false;
+  cones3.castShadow = false;
+
+  const tmp = new THREE.Object3D();
+  let index = 0;
+
+  while (index < treeCount) {
     const x = (Math.random() - 0.5) * (GROUND_SIZE - 100);
     const z = (Math.random() - 0.5) * (GROUND_SIZE - 100);
 
-    // Optionally keep a small clear area in the center
+    // Keep a small clear area in the center
     const minRadius = 20;
-    if (Math.hypot(x, z) < minRadius) {
-      i--;
-      continue;
-    }
+    if (Math.hypot(x, z) < minRadius) continue;
 
     const trunkH = 5 + Math.random() * 4;
     const trunkR = 0.25 + Math.random() * 0.15;
-    const trunkGeo = new THREE.CylinderGeometry(trunkR, trunkR, trunkH, 8);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x7a4a21, roughness: 1.0, metalness: 0.0 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.set(x, trunkH / 2, z);
-    trunk.castShadow = true;
-    trunk.receiveShadow = true;
 
-    // Foliage (stacked cones for a nicer shape)
-    const foliageGroup = new THREE.Group();
-    const foliageColor = 0x2e8b57;
+    // Trunk transform (scale unit cylinder)
+    tmp.position.set(x, trunkH / 2, z);
+    tmp.rotation.set(0, 0, 0);
+    tmp.scale.set(trunkR, trunkH, trunkR);
+    tmp.updateMatrix();
+    trunks.setMatrixAt(index, tmp.matrix);
 
-    const cone1 = new THREE.Mesh(
-      new THREE.ConeGeometry(trunkH * 0.55, trunkH * 1.0, 10),
-      new THREE.MeshStandardMaterial({ color: foliageColor, roughness: 0.9 })
-    );
-    cone1.position.y = trunkH + (trunkH * 1.0) / 2 - 0.2;
-    cone1.castShadow = true;
+    // Foliage sizes based on trunkH
+    const h1 = trunkH * 1.0, r1 = trunkH * 0.55;
+    const h2 = trunkH * 0.8,  r2 = trunkH * 0.45;
+    const h3 = trunkH * 0.6,  r3 = trunkH * 0.32;
 
-    const cone2 = new THREE.Mesh(
-      new THREE.ConeGeometry(trunkH * 0.45, trunkH * 0.8, 10),
-      new THREE.MeshStandardMaterial({ color: foliageColor, roughness: 0.9 })
-    );
-    cone2.position.y = trunkH + (trunkH * 1.0) - 0.3 + (trunkH * 0.8) / 2;
-    cone2.castShadow = true;
+    // First cone
+    tmp.position.set(x, trunkH + h1 / 2 - 0.2, z);
+    tmp.scale.set(r1, h1, r1);
+    tmp.updateMatrix();
+    cones1.setMatrixAt(index, tmp.matrix);
 
-    const cone3 = new THREE.Mesh(
-      new THREE.ConeGeometry(trunkH * 0.32, trunkH * 0.6, 10),
-      new THREE.MeshStandardMaterial({ color: foliageColor, roughness: 0.9 })
-    );
-    cone3.position.y = trunkH + (trunkH * 1.0) + (trunkH * 0.8) - 0.4 + (trunkH * 0.6) / 2;
-    cone3.castShadow = true;
+    // Second cone
+    tmp.position.set(x, trunkH + h1 - 0.3 + h2 / 2, z);
+    tmp.scale.set(r2, h2, r2);
+    tmp.updateMatrix();
+    cones2.setMatrixAt(index, tmp.matrix);
 
-    foliageGroup.add(cone1, cone2, cone3);
-    foliageGroup.position.set(x, 0, z);
+    // Third cone
+    tmp.position.set(x, trunkH + h1 + h2 - 0.4 + h3 / 2, z);
+    tmp.scale.set(r3, h3, r3);
+    tmp.updateMatrix();
+    cones3.setMatrixAt(index, tmp.matrix);
 
-    forest.add(trunk);
-    forest.add(foliageGroup);
+    index++;
   }
+
+  trunks.instanceMatrix.needsUpdate = true;
+  cones1.instanceMatrix.needsUpdate = true;
+  cones2.instanceMatrix.needsUpdate = true;
+  cones3.instanceMatrix.needsUpdate = true;
+
+  forest.add(trunks, cones1, cones2, cones3);
   scene.add(forest);
 }
-addForest(350);
+
+addForestInstanced(4000);
 
 // Controls (mouse look + keyboard move)
 const controls = new PointerLockControls(camera, document.body);
