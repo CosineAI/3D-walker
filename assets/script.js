@@ -357,6 +357,20 @@ function addRocksInstanced(rockCount = 1200) {
   const rockGeoA = new THREE.IcosahedronGeometry(1, 0);
   const rockGeoB = new THREE.IcosahedronGeometry(1, 1);
 
+  // Make rocks flat on the bottom so they sit on the ground
+  function flattenBottom(geo) {
+    const pos = geo.getAttribute('position');
+    const arr = pos.array;
+    for (let i = 0; i < arr.length; i += 3) {
+      if (arr[i + 1] < 0) arr[i + 1] = 0;
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
+  flattenBottom(rockGeoA);
+  flattenBottom(rockGeoB);
+
   // Materials
   const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 });
   const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0 });
@@ -457,16 +471,17 @@ function addRocksInstanced(rockCount = 1200) {
     const minRadius = 18;
     if (Math.hypot(x, z) < minRadius) continue;
 
-    const sx = rand(0.25, 1.1);
-    const sz = rand(0.25, 1.1);
-    const sy = rand(0.18, 0.7);
+    const scaleMul = 10;
+    const sx = rand(0.25, 1.1) * scaleMul;
+    const sz = rand(0.25, 1.1) * scaleMul;
+    const sy = rand(0.18, 0.7) * scaleMul;
     const r = Math.max(sx, sz) * 0.9;
 
     if (!canPlaceAgainstTrees(x, z, r)) continue;
     if (!canPlaceAgainstRocks(x, z, r)) continue;
 
     const ry = rand(0, Math.PI * 2);
-    const y = sy; // rest on ground plane
+    const y = -rand(0.05, 0.15) * sy; // bury slightly so the flat bottom sits in the dirt
 
     if (Math.random() < 0.6) {
       push(matsA, x, y, z, sx, sy, sz, ry);
