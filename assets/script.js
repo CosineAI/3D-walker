@@ -155,7 +155,7 @@ let isSprinting = false;
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
-const SPEED = 40; // world units per second
+const SPEED = 80; // world units per second (doubled)
 const DAMPING = 8.0;
 const SPRINT_MULTIPLIER = 2.0;
 
