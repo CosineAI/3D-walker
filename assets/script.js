@@ -49,6 +49,8 @@ scene.add(ground);
 
 // Keep track of tree footprints for later placement of rocks
 const treeFootprints = [];
+// Also track rocks for collisions
+const rockFootprints = [];
 
 // Soft blob shadow texture used for cheap tree shadows
 function createShadowTexture() {
@@ -203,15 +205,26 @@ function addForestInstanced(treeCount = 4000) {
       const h2 = trunkH * 0.80, r2 = trunkH * 0.45;
       const h3 = trunkH * 0.60, r3 = trunkH * 0.32;
 
-      const footR = Math.max(r1, r2, r3) * 0.9;
+      // Make conifers generally wider
+      const widthMul = 1.15 + Math.random() * 0.10; // 1.15–1.25
+      const R1 = r1 * widthMul;
+      const R2 = r2 * widthMul;
+      const R3 = r3 * widthMul;
+
+      // Increase overlap between cone sections
+      const overlapBase = h1 * 0.06;   // sink first cone slightly into trunk
+      const overlap12   = h2 * 0.18;   // overlap between cone 1 and 2
+      const overlap23   = h3 * 0.22;   // overlap between cone 2 and 3
+
+      const footR = Math.max(R1, R2, R3) * 0.9;
       if (!canPlaceAt(x, z, footR)) continue;
 
       push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
-      push(transforms.pineC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
-      push(transforms.pineC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
-      push(transforms.pineC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+      push(transforms.pineC1, x, trunkH + h1 / 2 - overlapBase,           z, R1, h1, R1);
+      push(transforms.pineC2, x, trunkH + h1 - overlap12 + h2 / 2,        z, R2, h2, R2);
+      push(transforms.pineC3, x, trunkH + h1 + h2 - overlap23 + h3 / 2,   z, R3, h3, R3);
 
-      const shadowR = Math.max(r1, r2, r3) * 1.1;
+      const shadowR = Math.max(R1, R2, R3) * 1.1;
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
@@ -224,15 +237,26 @@ function addForestInstanced(treeCount = 4000) {
       const h2 = trunkH * 1.00, r2 = trunkH * 0.33;
       const h3 = trunkH * 0.70, r3 = trunkH * 0.24;
 
-      const footR = Math.max(r1, r2, r3) * 0.9;
+      // Make conifers generally wider
+      const widthMul = 1.12 + Math.random() * 0.08; // 1.12–1.20 (slightly subtler than pine)
+      const R1 = r1 * widthMul;
+      const R2 = r2 * widthMul;
+      const R3 = r3 * widthMul;
+
+      // Increase overlap between cone sections
+      const overlapBase = h1 * 0.05;
+      const overlap12   = h2 * 0.16;
+      const overlap23   = h3 * 0.20;
+
+      const footR = Math.max(R1, R2, R3) * 0.9;
       if (!canPlaceAt(x, z, footR)) continue;
 
       push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
-      push(transforms.spruceC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
-      push(transforms.spruceC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
-      push(transforms.spruceC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+      push(transforms.spruceC1, x, trunkH + h1 / 2 - overlapBase,         z, R1, h1, R1);
+      push(transforms.spruceC2, x, trunkH + h1 - overlap12 + h2 / 2,      z, R2, h2, R2);
+      push(transforms.spruceC3, x, trunkH + h1 + h2 - overlap23 + h3 / 2, z, R3, h3, R3);
 
-      const shadowR = Math.max(r1, r2, r3) * 1.05;
+      const shadowR = Math.max(R1, R2, R3) * 1.05;
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
@@ -518,6 +542,8 @@ function addRocksInstanced(rockCount = 1200) {
     const k = rKey(ix, iz);
     if (!rockGrid.has(k)) rockGrid.set(k, []);
     rockGrid.get(k).push({ x, z, r });
+    // Track globally for player collision
+    rockFootprints.push({ x, z, r });
   }
 
   let placed = 0;
@@ -621,6 +647,119 @@ function addRocksInstanced(rockCount = 1200) {
 
 addForestInstanced(4000);
 addRocksInstanced(1200);
+
+// --- Simple collision system (2D circle colliders on XZ plane) ---
+const PLAYER_RADIUS = 1.6;           // player collision radius (world units)
+const COLLISION_CELL = 16;           // spatial hash cell size
+const COLLISION_NEIGHBOR_RANGE = 3;  // cells to search in each axis from player cell
+
+const collisionGrid = new Map();
+
+function cIndex(v) { return Math.floor(v / COLLISION_CELL); }
+function cKey(ix, iz) { return ix + ',' + iz; }
+
+function buildCollisionGrid() {
+  collisionGrid.clear();
+
+  // Insert trees
+  for (let i = 0; i < treeFootprints.length; i++) {
+    const p = treeFootprints[i];
+    const k = cKey(cIndex(p.x), cIndex(p.z));
+    if (!collisionGrid.has(k)) collisionGrid.set(k, []);
+    collisionGrid.get(k).push(p);
+  }
+
+  // Insert rocks
+  for (let i = 0; i < rockFootprints.length; i++) {
+    const p = rockFootprints[i];
+    const k = cKey(cIndex(p.x), cIndex(p.z));
+    if (!collisionGrid.has(k)) collisionGrid.set(k, []);
+    collisionGrid.get(k).push(p);
+  }
+}
+
+function getNearby(x, z) {
+  const ix = cIndex(x);
+  const iz = cIndex(z);
+  const res = [];
+  for (let dx = -COLLISION_NEIGHBOR_RANGE; dx <= COLLISION_NEIGHBOR_RANGE; dx++) {
+    for (let dz = -COLLISION_NEIGHBOR_RANGE; dz <= COLLISION_NEIGHBOR_RANGE; dz++) {
+      const k = cKey(ix + dx, iz + dz);
+      const cell = collisionGrid.get(k);
+      if (cell) res.push(...cell);
+    }
+  }
+  return res;
+}
+
+function collidesAt(x, z, r) {
+  const neighbors = getNearby(x, z);
+  for (let i = 0; i < neighbors.length; i++) {
+    const p = neighbors[i];
+    const minDist = r + p.r;
+    const dx = x - p.x;
+    const dz = z - p.z;
+    if ((dx * dx + dz * dz) < (minDist * minDist)) return true;
+  }
+  return false;
+}
+
+// Move the camera with collision, given local deltas in the camera's right/forward axes
+function attemptMoveLocal(dxLocal, dzLocal) {
+  if (dxLocal === 0 && dzLocal === 0) return;
+
+  // Compute world-space movement vectors
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() > 1e-6) forward.normalize(); else forward.set(0, 0, -1);
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const right = new THREE.Vector3().copy(forward).cross(up).normalize();
+
+  const worldDelta = new THREE.Vector3()
+    .addScaledVector(right, dxLocal)
+    .addScaledVector(forward, dzLocal);
+
+  // Break long moves into small steps to reduce tunneling through thin obstacles
+  const maxStep = 2.0;
+  const steps = Math.max(1, Math.ceil(worldDelta.length() / maxStep));
+  const stepDx = dxLocal / steps;
+  const stepDz = dzLocal / steps;
+
+  for (let i = 0; i < steps; i++) {
+    const dR = right.clone().multiplyScalar(stepDx);
+    const dF = forward.clone().multiplyScalar(stepDz);
+
+    // Axis-separated movement for natural sliding
+    if (stepDx !== 0) {
+      const candX = camera.position.x + dR.x;
+      const candZ = camera.position.z + dR.z;
+      if (!collidesAt(candX, candZ, PLAYER_RADIUS)) {
+        camera.position.x = candX;
+        camera.position.z = candZ;
+      } else {
+        // Stop strafing velocity if blocked
+        velocity.x = 0;
+      }
+    }
+
+    if (stepDz !== 0) {
+      const candX = camera.position.x + dF.x;
+      const candZ = camera.position.z + dF.z;
+      if (!collidesAt(candX, candZ, PLAYER_RADIUS)) {
+        camera.position.x = candX;
+        camera.position.z = candZ;
+      } else {
+        // Stop forward/back velocity if blocked
+        velocity.z = 0;
+      }
+    }
+  }
+}
+
+// Build the collision grid now that trees and rocks are placed
+buildCollisionGrid();
 
 // Controls (mouse look + keyboard move)
 const controls = new PointerLockControls(camera, document.body);
@@ -742,9 +881,8 @@ function animate() {
     if (moveForward || moveBackward) velocity.z -= direction.z * curSpeed * delta;
     if (moveLeft || moveRight) velocity.x -= direction.x * curSpeed * delta;
 
-    // Apply movement
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
+    // Apply movement with collision
+    attemptMoveLocal(-velocity.x * delta, -velocity.z * delta);
     clampPlayer();
 
     // Stamina drain/regen
