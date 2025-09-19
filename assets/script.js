@@ -205,15 +205,26 @@ function addForestInstanced(treeCount = 4000) {
       const h2 = trunkH * 0.80, r2 = trunkH * 0.45;
       const h3 = trunkH * 0.60, r3 = trunkH * 0.32;
 
-      const footR = Math.max(r1, r2, r3) * 0.9;
+      // Make conifers generally wider
+      const widthMul = 1.15 + Math.random() * 0.10; // 1.15–1.25
+      const R1 = r1 * widthMul;
+      const R2 = r2 * widthMul;
+      const R3 = r3 * widthMul;
+
+      // Increase overlap between cone sections
+      const overlapBase = h1 * 0.06;   // sink first cone slightly into trunk
+      const overlap12   = h2 * 0.18;   // overlap between cone 1 and 2
+      const overlap23   = h3 * 0.22;   // overlap between cone 2 and 3
+
+      const footR = Math.max(R1, R2, R3) * 0.9;
       if (!canPlaceAt(x, z, footR)) continue;
 
       push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
-      push(transforms.pineC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
-      push(transforms.pineC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
-      push(transforms.pineC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+      push(transforms.pineC1, x, trunkH + h1 / 2 - overlapBase,           z, R1, h1, R1);
+      push(transforms.pineC2, x, trunkH + h1 - overlap12 + h2 / 2,        z, R2, h2, R2);
+      push(transforms.pineC3, x, trunkH + h1 + h2 - overlap23 + h3 / 2,   z, R3, h3, R3);
 
-      const shadowR = Math.max(r1, r2, r3) * 1.1;
+      const shadowR = Math.max(R1, R2, R3) * 1.1;
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
@@ -226,15 +237,26 @@ function addForestInstanced(treeCount = 4000) {
       const h2 = trunkH * 1.00, r2 = trunkH * 0.33;
       const h3 = trunkH * 0.70, r3 = trunkH * 0.24;
 
-      const footR = Math.max(r1, r2, r3) * 0.9;
+      // Make conifers generally wider
+      const widthMul = 1.12 + Math.random() * 0.08; // 1.12–1.20 (slightly subtler than pine)
+      const R1 = r1 * widthMul;
+      const R2 = r2 * widthMul;
+      const R3 = r3 * widthMul;
+
+      // Increase overlap between cone sections
+      const overlapBase = h1 * 0.05;
+      const overlap12   = h2 * 0.16;
+      const overlap23   = h3 * 0.20;
+
+      const footR = Math.max(R1, R2, R3) * 0.9;
       if (!canPlaceAt(x, z, footR)) continue;
 
       push(transforms.trunkBrown, x, trunkH / 2, z, trunkR, trunkH, trunkR);
-      push(transforms.spruceC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
-      push(transforms.spruceC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
-      push(transforms.spruceC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+      push(transforms.spruceC1, x, trunkH + h1 / 2 - overlapBase,         z, R1, h1, R1);
+      push(transforms.spruceC2, x, trunkH + h1 - overlap12 + h2 / 2,      z, R2, h2, R2);
+      push(transforms.spruceC3, x, trunkH + h1 + h2 - overlap23 + h3 / 2, z, R3, h3, R3);
 
-      const shadowR = Math.max(r1, r2, r3) * 1.05;
+      const shadowR = Math.max(R1, R2, R3) * 1.05;
       addShadow(x, z, shadowR);
       insertAt(x, z, footR);
 
