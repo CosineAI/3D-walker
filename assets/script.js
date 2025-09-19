@@ -368,16 +368,57 @@ function addRocksInstanced(rockCount = 1200) {
     geo.computeVertexNormals();
     return geo;
   }
+
+  // Add some shape variation by jittering vertices
+  function jitterGeometry(geo, amount = 0.18, yFactor = 0.8) {
+    geo.computeVertexNormals();
+    const pos = geo.getAttribute('position');
+    const arr = pos.array;
+    for (let i = 0; i < arr.length; i += 3) {
+      const sx = 1 + (Math.random() * 2 - 1) * amount;
+      const sy = 1 + (Math.random() * 2 - 1) * amount * yFactor;
+      const sz = 1 + (Math.random() * 2 - 1) * amount;
+      arr[i] *= sx;
+      arr[i + 1] *= sy;
+      arr[i + 2] *= sz;
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // Create additional base shapes and vary them
+  const rockGeoC = new THREE.DodecahedronGeometry(1, 0);
+  const rockGeoD = new THREE.BoxGeometry(1.2, 0.7, 1.2, 2, 1, 2); // slab-like, then jitter
+  const rockGeoE = new THREE.OctahedronGeometry(1, 0);
+
+  // Jitter shapes for organic variety
+  jitterGeometry(rockGeoA, 0.18, 0.7);
+  jitterGeometry(rockGeoB, 0.12, 0.8);
+  jitterGeometry(rockGeoC, 0.15, 0.8);
+  jitterGeometry(rockGeoD, 0.10, 0.6);
+  jitterGeometry(rockGeoE, 0.20, 0.9);
+
+  // Flatten bottoms for all
   flattenBottom(rockGeoA);
   flattenBottom(rockGeoB);
+  flattenBottom(rockGeoC);
+  flattenBottom(rockGeoD);
+  flattenBottom(rockGeoE);
 
-  // Materials
-  const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 });
-  const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0 });
+  // Materials (a few subtle color variants)
+  const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 }); // light granite
+  const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0 }); // dark granite
+  const rockMatC = new THREE.MeshStandardMaterial({ color: 0x7a6e65, roughness: 0.98, metalness: 0.0 }); // brownish
+  const rockMatD = new THREE.MeshStandardMaterial({ color: 0x5f6a58, roughness: 0.98, metalness: 0.0 }); // mossy green-gray
+  const rockMatE = new THREE.MeshStandardMaterial({ color: 0x6b7685, roughness: 0.98, metalness: 0.0 }); // slate
 
   // Transform arrays per geometry
   const matsA = [];
   const matsB = [];
+  const matsC = [];
+  const matsD = [];
+  const matsE = [];
 
   // Helpers
   const tmp = new THREE.Object3D();
@@ -472,21 +513,60 @@ function addRocksInstanced(rockCount = 1200) {
     if (Math.hypot(x, z) < minRadius) continue;
 
     const scaleMul = 10;
-    const sx = rand(0.25, 1.1) * scaleMul;
-    const sz = rand(0.25, 1.1) * scaleMul;
-    const sy = rand(0.18, 0.7) * scaleMul;
+
+    // Choose a rock variant for more visual variety
+    const v = Math.random();
+    let variant = 'A';
+    if (v < 0.25) variant = 'A';
+    else if (v < 0.50) variant = 'B';
+    else if (v < 0.70) variant = 'C';
+    else if (v < 0.90) variant = 'D'; // slab
+    else variant = 'E';               // boulder
+
+    let sx, sy, sz;
+    if (variant === 'A') {
+      sx = rand(0.25, 1.10) * scaleMul;
+      sz = rand(0.25, 1.10) * scaleMul;
+      sy = rand(0.18, 0.70) * scaleMul;
+    } else if (variant === 'B') {
+      sx = rand(0.30, 1.40) * scaleMul;
+      sz = rand(0.30, 1.40) * scaleMul;
+      sy = rand(0.25, 0.90) * scaleMul;
+    } else if (variant === 'C') {
+      sx = rand(0.40, 1.60) * scaleMul;
+      sz = rand(0.40, 1.60) * scaleMul;
+      sy = rand(0.20, 1.20) * scaleMul;
+    } else if (variant === 'D') {
+      // flat slab-like stones
+      sx = rand(0.80, 2.20) * scaleMul;
+      sz = rand(0.80, 2.20) * scaleMul;
+      sy = rand(0.15, 0.35) * scaleMul;
+    } else {
+      // large boulders
+      const bigMul = scaleMul * 2.0;
+      sx = rand(1.00, 1.80) * bigMul;
+      sz = rand(1.00, 1.80) * bigMul;
+      sy = rand(0.90, 2.50) * bigMul;
+    }
+
     const r = Math.max(sx, sz) * 0.9;
 
     if (!canPlaceAgainstTrees(x, z, r)) continue;
     if (!canPlaceAgainstRocks(x, z, r)) continue;
 
     const ry = rand(0, Math.PI * 2);
-    const y = -rand(0.05, 0.15) * sy; // bury slightly so the flat bottom sits in the dirt
+    const y = -rand(0.05, 0.20) * sy; // bury slightly so the flat bottom sits in the dirt
 
-    if (Math.random() < 0.6) {
+    if (variant === 'A') {
       push(matsA, x, y, z, sx, sy, sz, ry);
+    } else if (variant === 'B') {
+      push(matsB, x, y, z, sx, sy, sz, ry);
+    } else if (variant === 'C') {
+      push(matsC, x, y, z, sx, sy, sz, ry);
+    } else if (variant === 'D') {
+      push(matsD, x, y, z, sx, sy, sz, ry);
     } else {
-      push(matsB, x, y, z, sx * 0.9, sy * 1.05, sz * 0.9, ry);
+      push(matsE, x, y, z, sx, sy, sz, ry);
     }
 
     insertRock(x, z, r);
@@ -507,8 +587,14 @@ function addRocksInstanced(rockCount = 1200) {
 
   const mA = build(rockGeoA, rockMatA, matsA);
   const mB = build(rockGeoB, rockMatB, matsB);
+  const mC = build(rockGeoC, rockMatC, matsC);
+  const mD = build(rockGeoD, rockMatD, matsD);
+  const mE = build(rockGeoE, rockMatE, matsE);
   if (mA) group.add(mA);
   if (mB) group.add(mB);
+  if (mC) group.add(mC);
+  if (mD) group.add(mD);
+  if (mE) group.add(mE);
 
   scene.add(group);
 }
