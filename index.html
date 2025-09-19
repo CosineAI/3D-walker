@@ -3,16 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>My Static Site</title>
+  <title>3D Forest Walk</title>
   <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
-  <main>
-    <h1>Welcome to Your Static Site</h1>
-  </main>
-  <footer>
-    <p>&copy; 2025 Your Name</p>
-  </footer>
-  <script src="assets/script.js"></script>
+  <div id="overlay">
+    <div class="panel">
+      <h1>Forest Walk</h1>
+      <p>Click the button to start</p>
+      <p>Mouse: look around<br>WASD or Arrow keys: move<br>Shift: sprint</p>
+      <button id="start">Enter</button>
+    </div>
+  </div>
+
+  <div id="hud" aria-label="HUD">
+    <div id="stamina" aria-label="Stamina bar">
+      <div id="stamina-fill"></div>
+    </div>
+  </div>
+
+  <script type="module" src="assets/script.js"></script>
 </body>
 </html>
