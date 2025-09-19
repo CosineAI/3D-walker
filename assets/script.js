@@ -9,6 +9,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // Scene and camera
@@ -44,6 +45,26 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+// Soft blob shadow texture used for cheap tree shadows
+function createShadowTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, size * 0.1, size / 2, size / 2, size * 0.5);
+  g.addColorStop(0, 'rgba(0,0,0,0.45)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 // Trees (instanced for performance) — now with multiple species for variety
 function addForestInstanced(treeCount = 4000) {
   const forest = new THREE.Group();
@@ -70,6 +91,7 @@ function addForestInstanced(treeCount = 4000) {
     spruceC1: [], spruceC2: [], spruceC3: [],
     decidBot: [], decidTop: [],
     birchBot: [], birchTop: [],
+    shadowBlobs: [],
   };
 
   // Helper to push transforms
@@ -80,6 +102,13 @@ function addForestInstanced(treeCount = 4000) {
     tmp.scale.set(sx, sy, sz);
     tmp.updateMatrix();
     arr.push(tmp.matrix.clone());
+  };
+
+  const addShadow = (x, z, radius) => {
+    // Slight randomness for more organic look
+    const rx = Math.max(2, radius * 2 * (0.95 + Math.random() * 0.1));
+    const rz = Math.max(2, radius * 2 * (0.95 + Math.random() * 0.1));
+    push(transforms.shadowBlobs, x, 0.01, z, rx, rz, 1);
   };
 
   // Distribute trees across the ground with a few species
@@ -108,6 +137,9 @@ function addForestInstanced(treeCount = 4000) {
       push(transforms.pineC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
       push(transforms.pineC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
 
+      const shadowR = Math.max(r1, r2, r3) * 1.1;
+      addShadow(x, z, shadowR);
+
     } else if (r < 0.60) {
       // Spruce — taller, narrower, darker needles
       const trunkH = 6.5 + Math.random() * 5;
@@ -121,6 +153,9 @@ function addForestInstanced(treeCount = 4000) {
       push(transforms.spruceC1, x, trunkH + h1 / 2 - 0.2, z, r1, h1, r1);
       push(transforms.spruceC2, x, trunkH + h1 - 0.3 + h2 / 2, z, r2, h2, r2);
       push(transforms.spruceC3, x, trunkH + h1 + h2 - 0.4 + h3 / 2, z, r3, h3, r3);
+
+      const shadowR = Math.max(r1, r2, r3) * 1.05;
+      addShadow(x, z, shadowR);
 
     } else if (r < 0.85) {
       // Deciduous — rounded canopy
@@ -138,6 +173,9 @@ function addForestInstanced(treeCount = 4000) {
       const syT = rT * 0.80;
       push(transforms.decidTop, x, trunkH + syB + syT * 0.5, z, rT, syT, rT);
 
+      const shadowR = Math.max(rB, rT) * 1.15;
+      addShadow(x, z, shadowR);
+
     } else if (r < 0.97) {
       // Birch — slender white trunk, light green canopy
       const trunkH = 5 + Math.random() * 3;
@@ -152,11 +190,16 @@ function addForestInstanced(treeCount = 4000) {
       const syT = rT * 0.70;
       push(transforms.birchTop, x, trunkH + syB + syT * 0.55, z, rT, syT, rT);
 
+      const shadowR = Math.max(rB, rT) * 1.1;
+      addShadow(x, z, shadowR);
+
     } else {
       // Dead tree — trunk only
       const trunkH = 5 + Math.random() * 5;
       const trunkR = 0.23 + Math.random() * 0.15;
       push(transforms.trunkDead, x, trunkH / 2, z, trunkR, trunkH, trunkR);
+
+      addShadow(x, z, trunkR * 1.5);
     }
 
     placed++;
@@ -194,6 +237,20 @@ function addForestInstanced(treeCount = 4000) {
     build(sphereGeo, foliageBirchMat,       transforms.birchBot),
     build(sphereGeo, foliageBirchMat,       transforms.birchTop),
   ];
+
+  // Build blob shadows
+  const shadowGeo = new THREE.PlaneGeometry(1, 1);
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: createShadowTexture(),
+    transparent: true,
+    depthWrite: false,
+  });
+  const shadowMesh = build(shadowGeo, shadowMat, transforms.shadowBlobs);
+  if (shadowMesh) {
+    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.renderOrder = 1;
+    forest.add(shadowMesh);
+  }
 
   for (const m of meshes) {
     if (m) forest.add(m);
