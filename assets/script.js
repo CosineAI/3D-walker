@@ -45,6 +45,9 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+// Keep track of tree footprints for later placement of rocks
+const treeFootprints = [];
+
 // Soft blob shadow texture used for cheap tree shadows
 function createShadowTexture() {
   const size = 128;
@@ -169,6 +172,8 @@ function addForestInstanced(treeCount = 4000) {
     const k = key(ix, iz);
     if (!grid.has(k)) grid.set(k, []);
     grid.get(k).push({ x, z, r });
+    // Record globally for later rock placement
+    treeFootprints.push({ x, z, r });
   }
 
   // Distribute trees across the ground with a few species
@@ -344,7 +349,157 @@ function addForestInstanced(treeCount = 4000) {
   scene.add(forest);
 }
 
+// Add rocks scattered on the ground, avoiding trees and each other
+function addRocksInstanced(rockCount = 1200) {
+  const group = new THREE.Group();
+
+  // Base geometries (low-poly rocks)
+  const rockGeoA = new THREE.IcosahedronGeometry(1, 0);
+  const rockGeoB = new THREE.IcosahedronGeometry(1, 1);
+
+  // Materials
+  const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 });
+  const rockMatB = new THREE.MeshStandardMaterial({ color: 0x70757d, roughness: 0.98, metalness: 0.0 });
+
+  // Transform arrays per geometry
+  const matsA = [];
+  const matsB = [];
+
+  // Helpers
+  const tmp = new THREE.Object3D();
+  const push = (arr, x, y, z, sx, sy, sz, ry) => {
+    tmp.position.set(x, y, z);
+    tmp.rotation.set(0, ry, 0);
+    tmp.scale.set(sx, sy, sz);
+    tmp.updateMatrix();
+    arr.push(tmp.matrix.clone());
+  };
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // Build a spatial grid for trees to quickly reject collisions
+  const CELL_SIZE_TREES = 12;
+  const tCellIndex = (v) => Math.floor(v / CELL_SIZE_TREES);
+  const tKey = (ix, iz) => ix + ',' + iz;
+  const treeGrid = new Map();
+  for (const p of treeFootprints) {
+    const ix = tCellIndex(p.x);
+    const iz = tCellIndex(p.z);
+    const k = tKey(ix, iz);
+    if (!treeGrid.has(k)) treeGrid.set(k, []);
+    treeGrid.get(k).push(p);
+  }
+
+  // Rock spatial grid (avoid rock-rock overlaps)
+  const CELL_SIZE_ROCKS = 6;
+  const rCellIndex = (v) => Math.floor(v / CELL_SIZE_ROCKS);
+  const rKey = (ix, iz) => ix + ',' + iz;
+  const rockGrid = new Map();
+
+  function canPlaceAgainstTrees(x, z, r) {
+    const ix = tCellIndex(x);
+    const iz = tCellIndex(z);
+    const range = Math.ceil((r + 10) / CELL_SIZE_TREES); // 10 ~ typical tree radius
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dz = -range; dz <= range; dz++) {
+        const k = tKey(ix + dx, iz + dz);
+        const cell = treeGrid.get(k);
+        if (!cell) continue;
+        for (let i = 0; i < cell.length; i++) {
+          const p = cell[i];
+          const minDist = r + p.r * 0.8; // small allowance so rocks can be near but not intersect trunks/canopies
+          const dxp = x - p.x;
+          const dzp = z - p.z;
+          if ((dxp * dxp + dzp * dzp) < (minDist * minDist)) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function canPlaceAgainstRocks(x, z, r) {
+    const ix = rCellIndex(x);
+    const iz = rCellIndex(z);
+    const range = Math.ceil(r / CELL_SIZE_ROCKS) + 1;
+    for (let dx = -range; dx <= range; dx++) {
+      for (let dz = -range; dz <= range; dz++) {
+        const k = rKey(ix + dx, iz + dz);
+        const cell = rockGrid.get(k);
+        if (!cell) continue;
+        for (let i = 0; i < cell.length; i++) {
+          const p = cell[i];
+          const minDist = r + p.r;
+          const dxp = x - p.x;
+          const dzp = z - p.z;
+          if ((dxp * dxp + dzp * dzp) < (minDist * minDist)) return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function insertRock(x, z, r) {
+    const ix = rCellIndex(x);
+    const iz = rCellIndex(z);
+    const k = rKey(ix, iz);
+    if (!rockGrid.has(k)) rockGrid.set(k, []);
+    rockGrid.get(k).push({ x, z, r });
+  }
+
+  let placed = 0;
+  let attempts = 0;
+  const MAX_ATTEMPTS = rockCount * 30;
+
+  while (placed < rockCount && attempts < MAX_ATTEMPTS) {
+    attempts++;
+
+    const x = (Math.random() - 0.5) * (GROUND_SIZE - 100);
+    const z = (Math.random() - 0.5) * (GROUND_SIZE - 100);
+    const minRadius = 18;
+    if (Math.hypot(x, z) < minRadius) continue;
+
+    const sx = rand(0.25, 1.1);
+    const sz = rand(0.25, 1.1);
+    const sy = rand(0.18, 0.7);
+    const r = Math.max(sx, sz) * 0.9;
+
+    if (!canPlaceAgainstTrees(x, z, r)) continue;
+    if (!canPlaceAgainstRocks(x, z, r)) continue;
+
+    const ry = rand(0, Math.PI * 2);
+    const y = sy; // rest on ground plane
+
+    if (Math.random() < 0.6) {
+      push(matsA, x, y, z, sx, sy, sz, ry);
+    } else {
+      push(matsB, x, y, z, sx * 0.9, sy * 1.05, sz * 0.9, ry);
+    }
+
+    insertRock(x, z, r);
+    placed++;
+  }
+
+  function build(geo, mat, matrices) {
+    if (!matrices.length) return null;
+    const mesh = new THREE.InstancedMesh(geo, mat, matrices.length);
+    for (let i = 0; i < matrices.length; i++) {
+      mesh.setMatrixAt(i, matrices[i]);
+    }
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    return mesh;
+  }
+
+  const mA = build(rockGeoA, rockMatA, matsA);
+  const mB = build(rockGeoB, rockMatB, matsB);
+  if (mA) group.add(mA);
+  if (mB) group.add(mB);
+
+  scene.add(group);
+}
+
 addForestInstanced(4000);
+addRocksInstanced(1200);
 
 // Controls (mouse look + keyboard move)
 const controls = new PointerLockControls(camera, document.body);
