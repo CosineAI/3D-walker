@@ -38,6 +38,12 @@ dirLight.shadow.camera.top = 200;
 dirLight.shadow.camera.bottom = -200;
 scene.add(dirLight);
 
+// Player lantern light (enabled at night; follows the camera)
+const playerLight = new THREE.PointLight(0xffe0bb, 0, 160, 2);
+playerLight.castShadow = false;
+playerLight.position.copy(camera.position);
+scene.add(playerLight);
+
 // Ground
 const GROUND_SIZE = 2000;
 const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
@@ -789,6 +795,7 @@ let isSprinting = false;
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
+const camForward = new THREE.Vector3();
 const SPEED = 80; // world units per second (doubled)
 const DAMPING = 8.0;
 const SPRINT_MULTIPLIER = 2.0;
@@ -924,42 +931,6 @@ function updateEnvironmentForTime(t) {
   hemi.color.copy(skyWork);
 }
 
-  // Daytime
-  out.copy(SKY_NOON);
-  return out;
-}
-
-function daylightStrengthHours(h) {
-  // Piecewise curve: 0 at night, ramps up at sunrise, peaks around noon, ramps down to 0 by ~7:30 pm
-  if (h < SUNRISE_START || h >= NIGHT_START) return 0;
-
-  if (h < SUNRISE_END) {
-    // Linear ramp from 0 -> 0.6 across sunrise window
-    return (h - SUNRISE_START) / (SUNRISE_END - SUNRISE_START) * 0.6;
-  }
-
-  if (h >= SUNSET_START) {
-    // Linear ramp from 0.6 -> 0 across sunset window (sunset_start..night_start)
-    const u = (h - SUNSET_START) / (NIGHT_START - SUNSET_START);
-    return (1 - u) * 0.6;
-  }
-
-  // Daytime arch peaking at noon; stays >= 0.6 during full day
-  const u = (h - SUNRISE_END) / (SUNSET_START - SUNRISE_END); // 0..1 across the day
-  return 0.6 + 0.4 * Math.sin(Math.PI * u); // 0.6 at edges, 1.0 at noon
-}
-
-function updateEnvironmentForHour(h) {
-  sampleSkyColor(skyWork, h);
-  scene.background.copy(skyWork);
-  if (scene.fog) scene.fog.color.copy(skyWork);
-
-  const f = daylightStrengthHours(h);
-  hemi.intensity = 0.1 + 0.5 * f;      // ~0.6 at noon, ~0.1 at night
-  dirLight.intensity = 0.05 + 0.75 * f; // ~0.8 at noon, small fill at night
-  hemi.color.copy(skyWork);
-}
-
 // Animation loop
 const clock = new THREE.Clock();
 
@@ -1007,7 +978,18 @@ function animate() {
 
   // Time of day progression and environment
   worldTimeHours = (worldTimeHours + delta * HOURS_PER_SECOND) % 24;
-  updateEnvironmentForHour(worldTimeHours);
+  const tDay = worldTimeHours / 24;
+  updateEnvironmentForTime(tDay);
+
+  // Player lantern: follow camera and fade in at night
+  const fLight = daylightStrength(tDay);
+  const nightFactor = 1 - THREE.MathUtils.smoothstep(fLight, 0.2, 0.55); // 1 at night, 0 in day
+  camera.getWorldDirection(camForward);
+  camForward.y = 0;
+  if (camForward.lengthSq() > 1e-6) camForward.normalize(); else camForward.set(0, 0, -1);
+  playerLight.intensity = 1.8 * nightFactor;
+  playerLight.position.copy(camera.position).addScaledVector(camForward, 1.5);
+  playerLight.position.y = EYE_HEIGHT;
 
   // Update HUD clock hands
   if (clockHourHand && clockMinuteHand) {
