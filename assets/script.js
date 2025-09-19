@@ -866,43 +866,63 @@ const clockHourHand = document.querySelector('#clock .hand.hour');
 const clockMinuteHand = document.querySelector('#clock .hand.minute');
 
 // Sky colors
-const SKY_NIGHT = new THREE.Color(0x0b1020);
+const SKY_NIGHT = new THREE.Color(0x0b1d4f); // deeper dark blue
 const SKY_SUNSET = new THREE.Color(0xff9a8b); // orange/pink
 const SKY_NOON  = new THREE.Color(0xaad8ff); // light blue
 const skyWork = new THREE.Color();
 
-// Time anchors (in hours)
-const SUNRISE_START = 5.5;  // ~5:30 am
-const SUNRISE_END   = 7.0;  // ~7:00 am
-const SUNSET_START  = 17.0; // ~5:00 pm
-const NIGHT_START   = 19.5; // ~7:30 pm -> should be dark by 7–8 pm
+// Color over time with earlier nightfall (~7–8pm)
+function sampleSkyColor(out, t) {
+  // Convert normalized day fraction to hour [0,24)
+  const h = ((t * 24) % 24 + 24) % 24;
 
-function sampleSkyColor(out, h) {
-  // h in [0,24): use key hours so night begins around 7–8 pm
-  if (h >= NIGHT_START || h < SUNRISE_START) {
-    out.copy(SKY_NIGHT);
-    return out;
-  }
+  const DAWN_START   = 6.0;  // start lightening
+  const DAY_START    = 9.0;  // fully day
+  const SUNSET_START = 18.0; // start turning orange/pink
+  const SUNSET_PEAK  = 19.0; // strongest sunset hues
+  const NIGHT_START  = 20.0; // fully night by ~8pm
 
-  if (h >= SUNSET_START && h < NIGHT_START) {
-    const u = (h - SUNSET_START) / (NIGHT_START - SUNSET_START); // 0..1
-    if (u < 0.5) {
-      out.copy(SKY_NOON).lerp(SKY_SUNSET, u / 0.5);
-    } else {
-      out.copy(SKY_SUNSET).lerp(SKY_NIGHT, (u - 0.5) / 0.5);
-    }
-    return out;
+  if (h < DAWN_START) {
+    return out.copy(SKY_NIGHT);
   }
+  if (h < DAY_START) {
+    const u = (h - DAWN_START) / (DAY_START - DAWN_START);
+    return out.copy(SKY_NIGHT).lerp(SKY_NOON, u);
+  }
+  if (h < SUNSET_START) {
+    return out.copy(SKY_NOON);
+  }
+  if (h < SUNSET_PEAK) {
+    const u = (h - SUNSET_START) / (SUNSET_PEAK - SUNSET_START);
+    return out.copy(SKY_NOON).lerp(SKY_SUNSET, u);
+  }
+  if (h < NIGHT_START) {
+    const u = (h - SUNSET_PEAK) / (NIGHT_START - SUNSET_PEAK);
+    return out.copy(SKY_SUNSET).lerp(SKY_NIGHT, u);
+  }
+  return out.copy(SKY_NIGHT);
+}
 
-  if (h >= SUNRISE_START && h < SUNRISE_END) {
-    const u = (h - SUNRISE_START) / (SUNRISE_END - SUNRISE_START); // 0..1
-    if (u < 0.5) {
-      out.copy(SKY_NIGHT).lerp(SKY_SUNSET, u / 0.5);
-    } else {
-      out.copy(SKY_SUNSET).lerp(SKY_NOON, (u - 0.5) / 0.5);
-    }
-    return out;
-  }
+function daylightStrength(t) {
+  // Daylight strength peaks at noon, 0 at night; earlier nightfall at 8pm
+  const h = ((t * 24) % 24 + 24) % 24;
+  const SUNRISE = 6.5;  // ~6:30am
+  const SUNSET  = 20.0; // 8:00pm
+  if (h <= SUNRISE || h >= SUNSET) return 0;
+  const p = (h - SUNRISE) / (SUNSET - SUNRISE); // 0..1 across the day
+  return Math.sin(p * Math.PI); // smooth 0->1->0 across daytime
+}
+
+function updateEnvironmentForTime(t) {
+  sampleSkyColor(skyWork, t);
+  scene.background.copy(skyWork);
+  if (scene.fog) scene.fog.color.copy(skyWork);
+
+  const f = daylightStrength(t);
+  hemi.intensity = 0.1 + 0.5 * f;       // ~0.6 at noon, ~0.1 at night
+  dirLight.intensity = 0.05 + 0.75 * f; // ~0.8 at noon, small fill at night
+  hemi.color.copy(skyWork);
+}
 
   // Daytime
   out.copy(SKY_NOON);
