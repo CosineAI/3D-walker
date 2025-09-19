@@ -127,9 +127,10 @@ function addForestInstanced(treeCount = 4000) {
     const rz = Math.max(2, radius * (base + shadowOffsetFactor)); // stretch along sun direction
     const offset = radius * shadowOffsetFactor;
 
-    tmp.position.set(x + sunDirXZ.x * offset, 0.01, z + sunDirXZ.z * offset);
+    tmp.position.set(x + sunDirXZ.x * offset, 0.02, z + sunDirXZ.z * offset);
     tmp.rotation.set(0, shadowAngleY, 0);
-    tmp.scale.set(rx, rz, 1);
+    // Scale in X and Z (ground plane). Keep Y ~1 so it doesn't stretch upward.
+    tmp.scale.set(rx, 1, rz);
     tmp.updateMatrix();
     transforms.shadowBlobs.push(tmp.matrix.clone());
   };
@@ -261,8 +262,9 @@ function addForestInstanced(treeCount = 4000) {
     build(sphereGeo, foliageBirchMat,       transforms.birchTop),
   ];
 
-  // Build blob shadows
+  // Build blob shadows — orient geometry on XZ so instances lie flat on ground
   const shadowGeo = new THREE.PlaneGeometry(1, 1);
+  shadowGeo.rotateX(-Math.PI / 2);
   const shadowMat = new THREE.MeshBasicMaterial({
     map: createShadowTexture(),
     transparent: true,
@@ -270,7 +272,6 @@ function addForestInstanced(treeCount = 4000) {
   });
   const shadowMesh = build(shadowGeo, shadowMat, transforms.shadowBlobs);
   if (shadowMesh) {
-    shadowMesh.rotation.x = -Math.PI / 2;
     shadowMesh.renderOrder = 1;
     forest.add(shadowMesh);
   }
