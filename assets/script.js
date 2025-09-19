@@ -3,6 +3,7 @@
 
 import * as THREE from 'https://esm.sh/three@0.180.0';
 import { PointerLockControls } from 'https://esm.sh/three@0.180.0/examples/jsm/controls/PointerLockControls.js';
+import { mergeVertices } from 'https://esm.sh/three@0.180.0/examples/jsm/utils/BufferGeometryUtils.js';
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -354,8 +355,8 @@ function addRocksInstanced(rockCount = 1200) {
   const group = new THREE.Group();
 
   // Base geometries (low-poly rocks)
-  const rockGeoA = new THREE.IcosahedronGeometry(1, 0);
-  const rockGeoB = new THREE.IcosahedronGeometry(1, 1);
+  let rockGeoA = new THREE.IcosahedronGeometry(1, 0);
+  let rockGeoB = new THREE.IcosahedronGeometry(1, 1);
 
   // Make rocks flat on the bottom so they sit on the ground
   function flattenBottom(geo) {
@@ -369,42 +370,43 @@ function addRocksInstanced(rockCount = 1200) {
     return geo;
   }
 
-  // Add some shape variation by jittering vertices
-  function jitterGeometry(geo, amount = 0.18, yFactor = 0.8) {
+  // Displace vertices along normals (keeps faces stitched) for organic variation
+  function displaceAlongNormals(geo, amplitude = 0.18, yFactor = 0.8) {
     geo.computeVertexNormals();
     const pos = geo.getAttribute('position');
-    const arr = pos.array;
-    for (let i = 0; i < arr.length; i += 3) {
-      const sx = 1 + (Math.random() * 2 - 1) * amount;
-      const sy = 1 + (Math.random() * 2 - 1) * amount * yFactor;
-      const sz = 1 + (Math.random() * 2 - 1) * amount;
-      arr[i] *= sx;
-      arr[i + 1] *= sy;
-      arr[i + 2] *= sz;
+    const nrm = geo.getAttribute('normal');
+    const pArr = pos.array;
+    const nArr = nrm.array;
+    for (let i = 0; i < pArr.length; i += 3) {
+      const amp = amplitude * (0.6 + Math.random() * 0.8);
+      pArr[i]     += nArr[i]     * amp;
+      pArr[i + 1] += nArr[i + 1] * amp * yFactor;
+      pArr[i + 2] += nArr[i + 2] * amp;
     }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     return geo;
   }
 
+  function prepareRockGeometry(baseGeo, amp, yFactor) {
+    // Merge duplicate vertices so faces stay connected during displacement
+    const merged = mergeVertices(baseGeo, 1e-3);
+    displaceAlongNormals(merged, amp, yFactor);
+    flattenBottom(merged);
+    return merged;
+  }
+
   // Create additional base shapes and vary them
-  const rockGeoC = new THREE.DodecahedronGeometry(1, 0);
-  const rockGeoD = new THREE.BoxGeometry(1.2, 0.7, 1.2, 2, 1, 2); // slab-like, then jitter
-  const rockGeoE = new THREE.OctahedronGeometry(1, 0);
+  let rockGeoC = new THREE.DodecahedronGeometry(1, 0);
+  let rockGeoD = new THREE.BoxGeometry(1.2, 0.7, 1.2, 2, 1, 2); // slab-like
+  let rockGeoE = new THREE.OctahedronGeometry(1, 0);
 
-  // Jitter shapes for organic variety
-  jitterGeometry(rockGeoA, 0.18, 0.7);
-  jitterGeometry(rockGeoB, 0.12, 0.8);
-  jitterGeometry(rockGeoC, 0.15, 0.8);
-  jitterGeometry(rockGeoD, 0.10, 0.6);
-  jitterGeometry(rockGeoE, 0.20, 0.9);
-
-  // Flatten bottoms for all
-  flattenBottom(rockGeoA);
-  flattenBottom(rockGeoB);
-  flattenBottom(rockGeoC);
-  flattenBottom(rockGeoD);
-  flattenBottom(rockGeoE);
+  // Prepare each shape (weld, displace, flatten)
+  rockGeoA = prepareRockGeometry(rockGeoA, 0.15, 0.7);
+  rockGeoB = prepareRockGeometry(rockGeoB, 0.12, 0.8);
+  rockGeoC = prepareRockGeometry(rockGeoC, 0.15, 0.8);
+  rockGeoD = prepareRockGeometry(rockGeoD, 0.08, 0.6);
+  rockGeoE = prepareRockGeometry(rockGeoE, 0.20, 0.9);
 
   // Materials (a few subtle color variants)
   const rockMatA = new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.98, metalness: 0.0 }); // light granite
