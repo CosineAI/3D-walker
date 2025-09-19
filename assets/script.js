@@ -49,6 +49,8 @@ scene.add(ground);
 
 // Keep track of tree footprints for later placement of rocks
 const treeFootprints = [];
+// Also track rocks for collisions
+const rockFootprints = [];
 
 // Soft blob shadow texture used for cheap tree shadows
 function createShadowTexture() {
@@ -518,6 +520,8 @@ function addRocksInstanced(rockCount = 1200) {
     const k = rKey(ix, iz);
     if (!rockGrid.has(k)) rockGrid.set(k, []);
     rockGrid.get(k).push({ x, z, r });
+    // Track globally for player collision
+    rockFootprints.push({ x, z, r });
   }
 
   let placed = 0;
@@ -621,6 +625,119 @@ function addRocksInstanced(rockCount = 1200) {
 
 addForestInstanced(4000);
 addRocksInstanced(1200);
+
+// --- Simple collision system (2D circle colliders on XZ plane) ---
+const PLAYER_RADIUS = 1.6;           // player collision radius (world units)
+const COLLISION_CELL = 16;           // spatial hash cell size
+const COLLISION_NEIGHBOR_RANGE = 3;  // cells to search in each axis from player cell
+
+const collisionGrid = new Map();
+
+function cIndex(v) { return Math.floor(v / COLLISION_CELL); }
+function cKey(ix, iz) { return ix + ',' + iz; }
+
+function buildCollisionGrid() {
+  collisionGrid.clear();
+
+  // Insert trees
+  for (let i = 0; i < treeFootprints.length; i++) {
+    const p = treeFootprints[i];
+    const k = cKey(cIndex(p.x), cIndex(p.z));
+    if (!collisionGrid.has(k)) collisionGrid.set(k, []);
+    collisionGrid.get(k).push(p);
+  }
+
+  // Insert rocks
+  for (let i = 0; i < rockFootprints.length; i++) {
+    const p = rockFootprints[i];
+    const k = cKey(cIndex(p.x), cIndex(p.z));
+    if (!collisionGrid.has(k)) collisionGrid.set(k, []);
+    collisionGrid.get(k).push(p);
+  }
+}
+
+function getNearby(x, z) {
+  const ix = cIndex(x);
+  const iz = cIndex(z);
+  const res = [];
+  for (let dx = -COLLISION_NEIGHBOR_RANGE; dx <= COLLISION_NEIGHBOR_RANGE; dx++) {
+    for (let dz = -COLLISION_NEIGHBOR_RANGE; dz <= COLLISION_NEIGHBOR_RANGE; dz++) {
+      const k = cKey(ix + dx, iz + dz);
+      const cell = collisionGrid.get(k);
+      if (cell) res.push(...cell);
+    }
+  }
+  return res;
+}
+
+function collidesAt(x, z, r) {
+  const neighbors = getNearby(x, z);
+  for (let i = 0; i < neighbors.length; i++) {
+    const p = neighbors[i];
+    const minDist = r + p.r;
+    const dx = x - p.x;
+    const dz = z - p.z;
+    if ((dx * dx + dz * dz) < (minDist * minDist)) return true;
+  }
+  return false;
+}
+
+// Move the camera with collision, given local deltas in the camera's right/forward axes
+function attemptMoveLocal(dxLocal, dzLocal) {
+  if (dxLocal === 0 && dzLocal === 0) return;
+
+  // Compute world-space movement vectors
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  if (forward.lengthSq() > 1e-6) forward.normalize(); else forward.set(0, 0, -1);
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const right = new THREE.Vector3().copy(forward).cross(up).normalize();
+
+  const worldDelta = new THREE.Vector3()
+    .addScaledVector(right, dxLocal)
+    .addScaledVector(forward, dzLocal);
+
+  // Break long moves into small steps to reduce tunneling through thin obstacles
+  const maxStep = 2.0;
+  const steps = Math.max(1, Math.ceil(worldDelta.length() / maxStep));
+  const stepDx = dxLocal / steps;
+  const stepDz = dzLocal / steps;
+
+  for (let i = 0; i < steps; i++) {
+    const dR = right.clone().multiplyScalar(stepDx);
+    const dF = forward.clone().multiplyScalar(stepDz);
+
+    // Axis-separated movement for natural sliding
+    if (stepDx !== 0) {
+      const candX = camera.position.x + dR.x;
+      const candZ = camera.position.z + dR.z;
+      if (!collidesAt(candX, candZ, PLAYER_RADIUS)) {
+        camera.position.x = candX;
+        camera.position.z = candZ;
+      } else {
+        // Stop strafing velocity if blocked
+        velocity.x = 0;
+      }
+    }
+
+    if (stepDz !== 0) {
+      const candX = camera.position.x + dF.x;
+      const candZ = camera.position.z + dF.z;
+      if (!collidesAt(candX, candZ, PLAYER_RADIUS)) {
+        camera.position.x = candX;
+        camera.position.z = candZ;
+      } else {
+        // Stop forward/back velocity if blocked
+        velocity.z = 0;
+      }
+    }
+  }
+}
+
+// Build the collision grid now that trees and rocks are placed
+buildCollisionGrid();
 
 // Controls (mouse look + keyboard move)
 const controls = new PointerLockControls(camera, document.body);
@@ -742,9 +859,8 @@ function animate() {
     if (moveForward || moveBackward) velocity.z -= direction.z * curSpeed * delta;
     if (moveLeft || moveRight) velocity.x -= direction.x * curSpeed * delta;
 
-    // Apply movement
-    controls.moveRight(-velocity.x * delta);
-    controls.moveForward(-velocity.z * delta);
+    // Apply movement with collision
+    attemptMoveLocal(-velocity.x * delta, -velocity.z * delta);
     clampPlayer();
 
     // Stamina drain/regen
