@@ -1,8 +1,8 @@
 // 3D Forest Walking Simulator
 // Arrow keys to move, mouse to look around
 
-import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import * as THREE from 'https://esm.sh/three@0.180.0';
+import { PointerLockControls } from 'https://esm.sh/three@0.180.0/examples/jsm/controls/PointerLockControls.js';
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
