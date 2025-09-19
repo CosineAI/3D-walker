@@ -138,6 +138,61 @@ canvas {
   transition: width 120ms ease, background-color 120ms ease;
 }
 
+/* Clock HUD */
+#clock {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  width: 64px;
+  height: 64px;
+  z-index: 12;
+  pointer-events: none;
+}
+
+#clock .dial {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(120px 120px at 50% 50%, rgba(255,255,255,0.18), rgba(255,255,255,0.06));
+  border: 1px solid rgba(255,255,255,0.35);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.28), inset 0 1px 2px rgba(255,255,255,0.3);
+  backdrop-filter: blur(2px);
+}
+
+#clock .hand {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  transform-origin: bottom center;
+  background: rgba(255,255,255,0.95);
+  border-radius: 999px;
+}
+
+#clock .hand.hour {
+  width: 3px;
+  height: 28%;
+  box-shadow: 0 0 6px rgba(255,255,255,0.7);
+}
+
+#clock .hand.minute {
+  width: 2px;
+  height: 38%;
+  opacity: 0.95;
+  box-shadow: 0 0 6px rgba(255,255,255,0.6);
+}
+
+#clock .center-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  left: 50%;
+  bottom: 50%;
+  transform: translate(-50%, 50%);
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(255,255,255,0.7);
+}
+
 @media (max-width: 850px) {
   main {
     max-width: 98vw;

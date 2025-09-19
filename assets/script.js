@@ -38,6 +38,12 @@ dirLight.shadow.camera.top = 200;
 dirLight.shadow.camera.bottom = -200;
 scene.add(dirLight);
 
+// Player lantern light (enabled at night; follows the camera)
+const playerLight = new THREE.PointLight(0xffe0bb, 0, 160, 2);
+playerLight.castShadow = false;
+playerLight.position.copy(camera.position);
+scene.add(playerLight);
+
 // Ground
 const GROUND_SIZE = 2000;
 const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
@@ -789,6 +795,7 @@ let isSprinting = false;
 
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
+const camForward = new THREE.Vector3();
 const SPEED = 80; // world units per second (doubled)
 const DAMPING = 8.0;
 const SPRINT_MULTIPLIER = 2.0;
@@ -856,6 +863,74 @@ function clampPlayer() {
   obj.position.z = Math.max(-half, Math.min(half, obj.position.z));
 }
 
+// Time of day system
+const HOUR_SECONDS = 10; // 1 in-game hour per 10 real seconds
+const HOURS_PER_SECOND = 1 / HOUR_SECONDS;
+let worldTimeHours = 12; // start at noon
+
+// HUD clock elements
+const clockHourHand = document.querySelector('#clock .hand.hour');
+const clockMinuteHand = document.querySelector('#clock .hand.minute');
+
+// Sky colors
+const SKY_NIGHT = new THREE.Color(0x0b1d4f); // deeper dark blue
+const SKY_SUNSET = new THREE.Color(0xff9a8b); // orange/pink
+const SKY_NOON  = new THREE.Color(0xaad8ff); // light blue
+const skyWork = new THREE.Color();
+
+// Color over time with earlier nightfall (~7–8pm)
+function sampleSkyColor(out, t) {
+  // Convert normalized day fraction to hour [0,24)
+  const h = ((t * 24) % 24 + 24) % 24;
+
+  const DAWN_START   = 6.0;  // start lightening
+  const DAY_START    = 9.0;  // fully day
+  const SUNSET_START = 18.0; // start turning orange/pink
+  const SUNSET_PEAK  = 19.0; // strongest sunset hues
+  const NIGHT_START  = 20.0; // fully night by ~8pm
+
+  if (h < DAWN_START) {
+    return out.copy(SKY_NIGHT);
+  }
+  if (h < DAY_START) {
+    const u = (h - DAWN_START) / (DAY_START - DAWN_START);
+    return out.copy(SKY_NIGHT).lerp(SKY_NOON, u);
+  }
+  if (h < SUNSET_START) {
+    return out.copy(SKY_NOON);
+  }
+  if (h < SUNSET_PEAK) {
+    const u = (h - SUNSET_START) / (SUNSET_PEAK - SUNSET_START);
+    return out.copy(SKY_NOON).lerp(SKY_SUNSET, u);
+  }
+  if (h < NIGHT_START) {
+    const u = (h - SUNSET_PEAK) / (NIGHT_START - SUNSET_PEAK);
+    return out.copy(SKY_SUNSET).lerp(SKY_NIGHT, u);
+  }
+  return out.copy(SKY_NIGHT);
+}
+
+function daylightStrength(t) {
+  // Daylight strength peaks at noon, 0 at night; earlier nightfall at 8pm
+  const h = ((t * 24) % 24 + 24) % 24;
+  const SUNRISE = 6.5;  // ~6:30am
+  const SUNSET  = 20.0; // 8:00pm
+  if (h <= SUNRISE || h >= SUNSET) return 0;
+  const p = (h - SUNRISE) / (SUNSET - SUNRISE); // 0..1 across the day
+  return Math.sin(p * Math.PI); // smooth 0->1->0 across daytime
+}
+
+function updateEnvironmentForTime(t) {
+  sampleSkyColor(skyWork, t);
+  scene.background.copy(skyWork);
+  if (scene.fog) scene.fog.color.copy(skyWork);
+
+  const f = daylightStrength(t);
+  hemi.intensity = 0.1 + 0.5 * f;       // ~0.6 at noon, ~0.1 at night
+  dirLight.intensity = 0.05 + 0.75 * f; // ~0.8 at noon, small fill at night
+  hemi.color.copy(skyWork);
+}
+
 // Animation loop
 const clock = new THREE.Clock();
 
@@ -899,6 +974,31 @@ function animate() {
   if (staminaFill) {
     staminaFill.style.width = `${(ratio * 100).toFixed(1)}%`;
     staminaFill.style.backgroundColor = ratio > 0.6 ? '#22c55e' : (ratio > 0.3 ? '#f59e0b' : '#ef4444');
+  }
+
+  // Time of day progression and environment
+  worldTimeHours = (worldTimeHours + delta * HOURS_PER_SECOND) % 24;
+  const tDay = worldTimeHours / 24;
+  updateEnvironmentForTime(tDay);
+
+  // Player lantern: follow camera and fade in at night
+  const fLight = daylightStrength(tDay);
+  const nightFactor = 1 - THREE.MathUtils.smoothstep(fLight, 0.2, 0.55); // 1 at night, 0 in day
+  camera.getWorldDirection(camForward);
+  camForward.y = 0;
+  if (camForward.lengthSq() > 1e-6) camForward.normalize(); else camForward.set(0, 0, -1);
+  playerLight.intensity = 1.8 * nightFactor;
+  playerLight.position.copy(camera.position).addScaledVector(camForward, 1.5);
+  playerLight.position.y = EYE_HEIGHT;
+
+  // Update HUD clock hands
+  if (clockHourHand && clockMinuteHand) {
+    const minutes = (worldTimeHours % 1) * 60;
+    const hour12 = worldTimeHours % 12;
+    const hourDeg = (hour12 + minutes / 60) * 30; // 360/12
+    const minuteDeg = minutes * 6;                 // 360/60
+    clockHourHand.style.transform = `translate(-50%, 0) rotate(${hourDeg}deg)`;
+    clockMinuteHand.style.transform = `translate(-50%, 0) rotate(${minuteDeg}deg)`;
   }
 
   renderer.render(scene, camera);
